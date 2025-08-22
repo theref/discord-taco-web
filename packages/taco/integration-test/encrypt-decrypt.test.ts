@@ -285,16 +285,17 @@ describe.skipIf(!process.env.RUNNING_IN_CI)(
       const message = toBytes(messageString);
 
       // Create a context variable condition that checks if userAddress is in allowlist
-      const contextVariableCondition = new conditions.base.contextVariable.ContextVariableCondition({
-        ...testContextVariableConditionObj,
-        returnValueTest: {
-          comparator: 'in',
-          value: [
-            CONSUMER_ADDRESS.toLowerCase(),
-            '0x0000000000000000000000000000000000000001',
-          ],
-        },
-      });
+      const contextVariableCondition =
+        new conditions.base.contextVariable.ContextVariableCondition({
+          ...testContextVariableConditionObj,
+          returnValueTest: {
+            comparator: 'in',
+            value: [
+              CONSUMER_ADDRESS.toLowerCase(),
+              '0x0000000000000000000000000000000000000001',
+            ],
+          },
+        });
 
       expect(contextVariableCondition.requiresAuthentication()).toBe(true);
 
@@ -342,16 +343,17 @@ describe.skipIf(!process.env.RUNNING_IN_CI)(
       const message = toBytes(messageString);
 
       // Create a context variable condition with specific allowed addresses
-      const restrictedContextVariableCondition = new conditions.base.contextVariable.ContextVariableCondition({
-        ...testContextVariableConditionObj,
-        returnValueTest: {
-          comparator: 'in',
-          value: [
-            '0x0000000000000000000000000000000000000001', // Not our consumer address
-            '0x0000000000000000000000000000000000000002',
-          ],
-        },
-      });
+      const restrictedContextVariableCondition =
+        new conditions.base.contextVariable.ContextVariableCondition({
+          ...testContextVariableConditionObj,
+          returnValueTest: {
+            comparator: 'in',
+            value: [
+              '0x0000000000000000000000000000000000000001', // Not our consumer address
+              '0x0000000000000000000000000000000000000002',
+            ],
+          },
+        });
 
       const messageKit = await encrypt(
         provider,
