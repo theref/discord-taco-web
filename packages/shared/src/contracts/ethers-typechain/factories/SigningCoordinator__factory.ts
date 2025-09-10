@@ -555,6 +555,24 @@ const _abi = [
   },
   {
     type: 'function',
+    name: 'extendSigningCohortDuration',
+    stateMutability: 'nonpayable',
+    inputs: [
+      {
+        name: 'cohortId',
+        type: 'uint32',
+        internalType: 'uint32',
+      },
+      {
+        name: 'additionalDuration',
+        type: 'uint32',
+        internalType: 'uint32',
+      },
+    ],
+    outputs: [],
+  },
+  {
+    type: 'function',
     name: 'getChains',
     stateMutability: 'view',
     inputs: [
@@ -569,30 +587,6 @@ const _abi = [
         name: '',
         type: 'uint256[]',
         internalType: 'uint256[]',
-      },
-    ],
-  },
-  {
-    type: 'function',
-    name: 'getCondition',
-    stateMutability: 'view',
-    inputs: [
-      {
-        name: 'cohortId',
-        type: 'uint32',
-        internalType: 'uint32',
-      },
-      {
-        name: 'chainId',
-        type: 'uint256',
-        internalType: 'uint256',
-      },
-    ],
-    outputs: [
-      {
-        name: '',
-        type: 'bytes',
-        internalType: 'bytes',
       },
     ],
   },
@@ -770,6 +764,25 @@ const _abi = [
         name: '',
         type: 'address',
         internalType: 'address',
+      },
+    ],
+  },
+  {
+    type: 'function',
+    name: 'getThreshold',
+    stateMutability: 'view',
+    inputs: [
+      {
+        name: 'cohortId',
+        type: 'uint32',
+        internalType: 'uint32',
+      },
+    ],
+    outputs: [
+      {
+        name: '',
+        type: 'uint16',
+        internalType: 'uint16',
       },
     ],
   },

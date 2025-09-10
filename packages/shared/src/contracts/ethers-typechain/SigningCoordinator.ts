@@ -53,8 +53,8 @@ export interface SigningCoordinatorInterface extends utils.Interface {
     'defaultAdminDelay()': FunctionFragment;
     'defaultAdminDelayIncreaseWait()': FunctionFragment;
     'deployAdditionalChainForSigningMultisig(uint256,uint32)': FunctionFragment;
+    'extendSigningCohortDuration(uint32,uint32)': FunctionFragment;
     'getChains(uint32)': FunctionFragment;
-    'getCondition(uint32,uint256)': FunctionFragment;
     'getRoleAdmin(bytes32)': FunctionFragment;
     'getSigner(uint32,address)': FunctionFragment;
     'getSigners(uint32)': FunctionFragment;
@@ -62,6 +62,7 @@ export interface SigningCoordinatorInterface extends utils.Interface {
     'getSigningCohortDataHash(uint32)': FunctionFragment;
     'getSigningCohortState(uint32)': FunctionFragment;
     'getSigningCoordinatorChild(uint256)': FunctionFragment;
+    'getThreshold(uint32)': FunctionFragment;
     'grantRole(bytes32,address)': FunctionFragment;
     'hasRole(bytes32,address)': FunctionFragment;
     'initialize(uint32,uint16,address,address)': FunctionFragment;
@@ -100,8 +101,8 @@ export interface SigningCoordinatorInterface extends utils.Interface {
       | 'defaultAdminDelay'
       | 'defaultAdminDelayIncreaseWait'
       | 'deployAdditionalChainForSigningMultisig'
+      | 'extendSigningCohortDuration'
       | 'getChains'
-      | 'getCondition'
       | 'getRoleAdmin'
       | 'getSigner'
       | 'getSigners'
@@ -109,6 +110,7 @@ export interface SigningCoordinatorInterface extends utils.Interface {
       | 'getSigningCohortDataHash'
       | 'getSigningCohortState'
       | 'getSigningCoordinatorChild'
+      | 'getThreshold'
       | 'grantRole'
       | 'hasRole'
       | 'initialize'
@@ -179,12 +181,12 @@ export interface SigningCoordinatorInterface extends utils.Interface {
     values: [BigNumberish, BigNumberish],
   ): string;
   encodeFunctionData(
-    functionFragment: 'getChains',
-    values: [BigNumberish],
+    functionFragment: 'extendSigningCohortDuration',
+    values: [BigNumberish, BigNumberish],
   ): string;
   encodeFunctionData(
-    functionFragment: 'getCondition',
-    values: [BigNumberish, BigNumberish],
+    functionFragment: 'getChains',
+    values: [BigNumberish],
   ): string;
   encodeFunctionData(
     functionFragment: 'getRoleAdmin',
@@ -212,6 +214,10 @@ export interface SigningCoordinatorInterface extends utils.Interface {
   ): string;
   encodeFunctionData(
     functionFragment: 'getSigningCoordinatorChild',
+    values: [BigNumberish],
+  ): string;
+  encodeFunctionData(
+    functionFragment: 'getThreshold',
     values: [BigNumberish],
   ): string;
   encodeFunctionData(
@@ -345,11 +351,11 @@ export interface SigningCoordinatorInterface extends utils.Interface {
     functionFragment: 'deployAdditionalChainForSigningMultisig',
     data: BytesLike,
   ): Result;
-  decodeFunctionResult(functionFragment: 'getChains', data: BytesLike): Result;
   decodeFunctionResult(
-    functionFragment: 'getCondition',
+    functionFragment: 'extendSigningCohortDuration',
     data: BytesLike,
   ): Result;
+  decodeFunctionResult(functionFragment: 'getChains', data: BytesLike): Result;
   decodeFunctionResult(
     functionFragment: 'getRoleAdmin',
     data: BytesLike,
@@ -370,6 +376,10 @@ export interface SigningCoordinatorInterface extends utils.Interface {
   ): Result;
   decodeFunctionResult(
     functionFragment: 'getSigningCoordinatorChild',
+    data: BytesLike,
+  ): Result;
+  decodeFunctionResult(
+    functionFragment: 'getThreshold',
     data: BytesLike,
   ): Result;
   decodeFunctionResult(functionFragment: 'grantRole', data: BytesLike): Result;
@@ -722,16 +732,16 @@ export interface SigningCoordinator extends BaseContract {
       overrides?: Overrides & { from?: string },
     ): Promise<ContractTransaction>;
 
+    extendSigningCohortDuration(
+      cohortId: BigNumberish,
+      additionalDuration: BigNumberish,
+      overrides?: Overrides & { from?: string },
+    ): Promise<ContractTransaction>;
+
     getChains(
       cohortId: BigNumberish,
       overrides?: CallOverrides,
     ): Promise<[BigNumber[]]>;
-
-    getCondition(
-      cohortId: BigNumberish,
-      chainId: BigNumberish,
-      overrides?: CallOverrides,
-    ): Promise<[string]>;
 
     getRoleAdmin(role: BytesLike, overrides?: CallOverrides): Promise<[string]>;
 
@@ -766,6 +776,11 @@ export interface SigningCoordinator extends BaseContract {
       chainId: BigNumberish,
       overrides?: CallOverrides,
     ): Promise<[string]>;
+
+    getThreshold(
+      cohortId: BigNumberish,
+      overrides?: CallOverrides,
+    ): Promise<[number]>;
 
     grantRole(
       role: BytesLike,
@@ -926,16 +941,16 @@ export interface SigningCoordinator extends BaseContract {
     overrides?: Overrides & { from?: string },
   ): Promise<ContractTransaction>;
 
+  extendSigningCohortDuration(
+    cohortId: BigNumberish,
+    additionalDuration: BigNumberish,
+    overrides?: Overrides & { from?: string },
+  ): Promise<ContractTransaction>;
+
   getChains(
     cohortId: BigNumberish,
     overrides?: CallOverrides,
   ): Promise<BigNumber[]>;
-
-  getCondition(
-    cohortId: BigNumberish,
-    chainId: BigNumberish,
-    overrides?: CallOverrides,
-  ): Promise<string>;
 
   getRoleAdmin(role: BytesLike, overrides?: CallOverrides): Promise<string>;
 
@@ -970,6 +985,11 @@ export interface SigningCoordinator extends BaseContract {
     chainId: BigNumberish,
     overrides?: CallOverrides,
   ): Promise<string>;
+
+  getThreshold(
+    cohortId: BigNumberish,
+    overrides?: CallOverrides,
+  ): Promise<number>;
 
   grantRole(
     role: BytesLike,
@@ -1126,16 +1146,16 @@ export interface SigningCoordinator extends BaseContract {
       overrides?: CallOverrides,
     ): Promise<void>;
 
+    extendSigningCohortDuration(
+      cohortId: BigNumberish,
+      additionalDuration: BigNumberish,
+      overrides?: CallOverrides,
+    ): Promise<void>;
+
     getChains(
       cohortId: BigNumberish,
       overrides?: CallOverrides,
     ): Promise<BigNumber[]>;
-
-    getCondition(
-      cohortId: BigNumberish,
-      chainId: BigNumberish,
-      overrides?: CallOverrides,
-    ): Promise<string>;
 
     getRoleAdmin(role: BytesLike, overrides?: CallOverrides): Promise<string>;
 
@@ -1170,6 +1190,11 @@ export interface SigningCoordinator extends BaseContract {
       chainId: BigNumberish,
       overrides?: CallOverrides,
     ): Promise<string>;
+
+    getThreshold(
+      cohortId: BigNumberish,
+      overrides?: CallOverrides,
+    ): Promise<number>;
 
     grantRole(
       role: BytesLike,
@@ -1461,14 +1486,14 @@ export interface SigningCoordinator extends BaseContract {
       overrides?: Overrides & { from?: string },
     ): Promise<BigNumber>;
 
-    getChains(
+    extendSigningCohortDuration(
       cohortId: BigNumberish,
-      overrides?: CallOverrides,
+      additionalDuration: BigNumberish,
+      overrides?: Overrides & { from?: string },
     ): Promise<BigNumber>;
 
-    getCondition(
+    getChains(
       cohortId: BigNumberish,
-      chainId: BigNumberish,
       overrides?: CallOverrides,
     ): Promise<BigNumber>;
 
@@ -1506,6 +1531,11 @@ export interface SigningCoordinator extends BaseContract {
 
     getSigningCoordinatorChild(
       chainId: BigNumberish,
+      overrides?: CallOverrides,
+    ): Promise<BigNumber>;
+
+    getThreshold(
+      cohortId: BigNumberish,
       overrides?: CallOverrides,
     ): Promise<BigNumber>;
 
@@ -1659,14 +1689,14 @@ export interface SigningCoordinator extends BaseContract {
       overrides?: Overrides & { from?: string },
     ): Promise<PopulatedTransaction>;
 
-    getChains(
+    extendSigningCohortDuration(
       cohortId: BigNumberish,
-      overrides?: CallOverrides,
+      additionalDuration: BigNumberish,
+      overrides?: Overrides & { from?: string },
     ): Promise<PopulatedTransaction>;
 
-    getCondition(
+    getChains(
       cohortId: BigNumberish,
-      chainId: BigNumberish,
       overrides?: CallOverrides,
     ): Promise<PopulatedTransaction>;
 
@@ -1704,6 +1734,11 @@ export interface SigningCoordinator extends BaseContract {
 
     getSigningCoordinatorChild(
       chainId: BigNumberish,
+      overrides?: CallOverrides,
+    ): Promise<PopulatedTransaction>;
+
+    getThreshold(
+      cohortId: BigNumberish,
       overrides?: CallOverrides,
     ): Promise<PopulatedTransaction>;
 
