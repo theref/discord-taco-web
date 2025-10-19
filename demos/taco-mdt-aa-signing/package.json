@@ -8,9 +8,12 @@
     "check": "tsx --no-warnings src/index.ts --dry-run 2>/dev/null && echo '✓ Demo syntax check passed'",
     "start": "tsx src/index.ts",
     "dev": "tsx src/index.ts --debug",
-    "type-check": "echo \"Note: Full type-check skipped due to viem/delegation-toolkit type incompatibilities\""
+    "type-check": "echo \"Note: Full type-check skipped due to viem/delegation-toolkit type incompatibilities\"",
+    "bot:deploy": "node src/bot/deploy-commands.js",
+    "bot:dev": "node src/bot/index.js"
   },
   "dependencies": {
+    "discord.js": "^14.16.3",
     "@collabland/accountkit-sdk": "^0.2.0",
     "@metamask/delegation-toolkit": "^0.11.0",
     "@metamask/delegation-utils": "^0.11.0",

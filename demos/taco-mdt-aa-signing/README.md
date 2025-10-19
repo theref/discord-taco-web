@@ -109,3 +109,39 @@ All the core logic is in `src/index.ts` - easy to understand and modify.
 - [TACo Documentation](https://docs.taco.build)
 - [Account Abstraction (ERC-4337)](https://eips.ethereum.org/EIPS/eip-4337)
 - [MetaMask Delegation Toolkit](https://github.com/MetaMask/delegation-toolkit)
+
+## Discord Bot Integration (/tip)
+
+Add a minimal Discord bot to trigger this demo via a slash command.
+
+### Env
+
+```env
+DISCORD_TOKEN=...
+DISCORD_CLIENT_ID=...
+DISCORD_GUILD_ID=...              # deploy commands instantly to this guild
+COLLABLAND_ACCOUNTKIT_API_KEY=...
+TELEGRAM_BOT_TOKEN=...
+ACCOUNT_KIT_BASE_URL=https://api-qa.collab.land
+FUNDING_CHAIN_ID=11155111         # or 84532, etc.
+FUNDING_AMOUNT_ETH=0.001
+MIN_SA_BALANCE_ETH=0.001
+```
+
+### Deploy command and run bot
+
+```bash
+# from demos/taco-mdt-aa-signing
+pnpm run bot:deploy   # deploys /tip to DISCORD_GUILD_ID
+pnpm run bot:dev      # starts the bot
+```
+
+### Use
+
+- In your Discord server, run `/tip`.
+- The bot spawns the demo (`pnpm start`), streams logs to the server console, and sends a single ephemeral result when done.
+
+### Notes
+
+- Funding is performed via Collab.Land Account Kit bot wallet (v1 telegrambot endpoints).
+- The smart account and transaction logic is unchanged; this only wraps the demo with Discord UX.
