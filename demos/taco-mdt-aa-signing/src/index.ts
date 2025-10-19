@@ -27,6 +27,8 @@ import { privateKeyToAccount } from 'viem/accounts';
 import { sepolia } from 'viem/chains';
 
 import { createViemTacoAccount } from './taco-account';
+import { submitFundingUserOp } from './collabland';
+import { getBotSmartAccountAddress } from './botwallet';
 
 dotenv.config();
 
@@ -160,6 +162,12 @@ async function main() {
     };
 
     console.log('🔧 Creating TACo smart account...\n');
+    const botSa = await getBotSmartAccountAddress();
+    if (botSa) {
+      console.log(`🤖 Collab.Land bot smart account: ${botSa}`);
+    } else {
+      console.log('🤖 Collab.Land bot smart account: [unavailable]');
+    }
     const { smartAccount, threshold } = await createTacoSmartAccount(
       publicClient,
       provider,
@@ -170,18 +178,27 @@ async function main() {
     await logBalances(provider, localAccount.address, smartAccount.address);
 
     const smartAccountBalance = await provider.getBalance(smartAccount.address);
-    if (smartAccountBalance.lt(ethers.utils.parseEther('0.01'))) {
-      console.log('💰 Funding smart account...');
-      const eoaWallet = new ethers.Wallet(
-        process.env.PRIVATE_KEY as string,
-        provider,
+    const minSa = ethers.utils.parseEther(
+      process.env.MIN_SA_BALANCE_ETH || '0.001',
+    );
+    if (smartAccountBalance.lt(minSa)) {
+      console.log('💰 Funding smart account via Collab.Land Account Kit bot wallet...');
+      const topUpAmt = ethers.utils.parseEther(
+        process.env.FUNDING_AMOUNT_ETH || '0.001',
       );
-      const fundTx = await eoaWallet.sendTransaction({
-        to: smartAccount.address,
-        value: ethers.utils.parseEther('0.001'),
-      });
-      await fundTx.wait();
-      console.log(`✅ Funded successfully!\n🔗 Tx: ${fundTx.hash}`);
+      const chainIdForFunding = Number(
+        process.env.FUNDING_CHAIN_ID || SEPOLIA_CHAIN_ID,
+      );
+      const valueHex = ethers.utils.hexlify(topUpAmt);
+      const { userOpHash, txHash } = await submitFundingUserOp(
+        smartAccount.address,
+        valueHex,
+        chainIdForFunding,
+      );
+      console.log(
+        `✅ userOperation submitted: ${userOpHash}${txHash ? `\n🔗 Tx: ${txHash}` : ''}`,
+      );
+      await new Promise((r) => setTimeout(r, 8000));
       await logBalances(provider, localAccount.address, smartAccount.address);
     }
 

@@ -11,11 +11,13 @@
     "type-check": "echo \"Note: Full type-check skipped due to viem/delegation-toolkit type incompatibilities\""
   },
   "dependencies": {
+    "@collabland/accountkit-sdk": "^0.2.0",
     "@metamask/delegation-toolkit": "^0.11.0",
     "@metamask/delegation-utils": "^0.11.0",
-    "@nucypher/shared": "^0.6.0-alpha.2",
-    "@nucypher/taco": "^0.7.0-alpha.2",
-    "@nucypher/taco-auth": "^0.4.0-alpha.2",
+    "@nucypher/shared": "workspace:^0.6.0-alpha.2",
+    "@nucypher/taco": "workspace:^0.7.0-alpha.2",
+    "@nucypher/taco-auth": "workspace:^0.4.0-alpha.2",
+    "axios": "^1.12.2",
     "dotenv": "^16.5.0",
     "ethers": "^5.8.0",
     "permissionless": "^0.2.54",

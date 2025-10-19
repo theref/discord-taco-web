@@ -17,3 +17,4 @@ docs-json
 packages/docs
 docs
 .claude/
+*-lock
