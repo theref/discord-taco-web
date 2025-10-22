@@ -27,8 +27,7 @@ import { privateKeyToAccount } from 'viem/accounts';
 import { sepolia } from 'viem/chains';
 
 import { createViemTacoAccount } from './taco-account';
-import { submitFundingUserOp } from './collabland';
-import { getBotSmartAccountAddress } from './botwallet';
+// Collab.Land Account Kit funding removed in this branch; using local EOA funding
 
 dotenv.config();
 
@@ -162,12 +161,7 @@ async function main() {
     };
 
     console.log('🔧 Creating TACo smart account...\n');
-    const botSa = await getBotSmartAccountAddress();
-    if (botSa) {
-      console.log(`🤖 Collab.Land bot smart account: ${botSa}`);
-    } else {
-      console.log('🤖 Collab.Land bot smart account: [unavailable]');
-    }
+    // No bot wallet address in EOA funding mode
     const { smartAccount, threshold } = await createTacoSmartAccount(
       publicClient,
       provider,
@@ -182,24 +176,17 @@ async function main() {
       process.env.MIN_SA_BALANCE_ETH || '0.001',
     );
     if (smartAccountBalance.lt(minSa)) {
-      const topUpAmt = ethers.utils.parseEther(
-        process.env.FUNDING_AMOUNT_ETH || '0.001',
+      console.log('💰 Funding smart account via local EOA...');
+      const eoaWallet = new ethers.Wallet(
+        process.env.PRIVATE_KEY as string,
+        provider,
       );
-      const chainIdForFunding = Number(
-        process.env.FUNDING_CHAIN_ID || SEPOLIA_CHAIN_ID,
-      );
-      const valueHex = ethers.utils.hexlify(topUpAmt);
-
-      console.log('💰 Funding smart account via Collab.Land Account Kit bot wallet...');
-      const { userOpHash, txHash } = await submitFundingUserOp(
-        smartAccount.address,
-        valueHex,
-        chainIdForFunding,
-      );
-      console.log(
-        `✅ userOperation submitted: ${userOpHash}${txHash ? `\n🔗 Tx: ${txHash}` : ''}`,
-      );
-      await new Promise((r) => setTimeout(r, 8000));
+      const fundTx = await eoaWallet.sendTransaction({
+        to: smartAccount.address,
+        value: ethers.utils.parseEther(process.env.FUNDING_AMOUNT_ETH || '0.001'),
+      });
+      await fundTx.wait();
+      console.log(`✅ Funded successfully!\n🔗 Tx: ${fundTx.hash}`);
       await logBalances(provider, localAccount.address, smartAccount.address);
     }
 
