@@ -182,7 +182,6 @@ async function main() {
       process.env.MIN_SA_BALANCE_ETH || '0.001',
     );
     if (smartAccountBalance.lt(minSa)) {
-      console.log('💰 Funding smart account via Collab.Land Account Kit bot wallet...');
       const topUpAmt = ethers.utils.parseEther(
         process.env.FUNDING_AMOUNT_ETH || '0.001',
       );
@@ -190,6 +189,8 @@ async function main() {
         process.env.FUNDING_CHAIN_ID || SEPOLIA_CHAIN_ID,
       );
       const valueHex = ethers.utils.hexlify(topUpAmt);
+
+      console.log('💰 Funding smart account via Collab.Land Account Kit bot wallet...');
       const { userOpHash, txHash } = await submitFundingUserOp(
         smartAccount.address,
         valueHex,

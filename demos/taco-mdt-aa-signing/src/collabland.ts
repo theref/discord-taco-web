@@ -18,14 +18,47 @@ export async function submitFundingUserOp(
   const submitUrl = `${baseUrl}/accountkit/v1/telegrambot/evm/submitUserOperation?chainId=${chainId}`;
   const payload = { target, calldata: '0x', value: valueWeiHex };
 
-  const { data } = await axios.post(submitUrl, payload, {
-    headers: {
-      'X-API-KEY': apiKey,
-      'X-TG-BOT-TOKEN': botToken,
+  let data: any;
+  try {
+    const resp = await axios.post(submitUrl, payload, {
+      headers: {
+        'X-API-KEY': apiKey,
+        'X-TG-BOT-TOKEN': botToken,
+        'Content-Type': 'application/json',
+      },
+      timeout: 30000,
+    });
+    data = resp.data;
+  } catch (err: unknown) {
+    // Capture exact 400 (and other) payloads for diagnosis
+    const e = err as any;
+    const status = e?.response?.status;
+    const respData = e?.response?.data;
+    const respHeaders = e?.response?.headers;
+    console.error('[AccountKit submitUserOperation] Request failed');
+    console.error('  URL:', submitUrl);
+    console.error('  ChainId:', chainId);
+    console.error('  Payload:', payload);
+    console.error('  Headers:', {
+      'X-API-KEY': apiKey ? '[PRESENT]' : '[MISSING]',
+      'X-TG-BOT-TOKEN': botToken ? '[PRESENT]' : '[MISSING]',
       'Content-Type': 'application/json',
-    },
-    timeout: 30000,
-  });
+    });
+    if (status) {
+      console.error('  Status:', status);
+    }
+    if (respData) {
+      try {
+        console.error('  Response Data:', JSON.stringify(respData, null, 2));
+      } catch {
+        console.error('  Response Data (raw):', respData);
+      }
+    }
+    if (respHeaders) {
+      console.error('  Response Headers:', respHeaders);
+    }
+    throw new Error(`AccountKit submitUserOperation failed${status ? ` (status ${status})` : ''}`);
+  }
 
   const userOpHash = data?.userOperationHash || data?.userOpHash || data?.transactionHash;
   if (!userOpHash) {
@@ -49,7 +82,14 @@ export async function submitFundingUserOp(
       if (txHash) {
         return { userOpHash, txHash };
       }
-    } catch {
+    } catch (err: unknown) {
+      const e = err as any;
+      if (e?.response) {
+        console.error('[AccountKit userOperationReceipt] Poll error', {
+          status: e.response.status,
+          data: e.response.data,
+        });
+      }
       // ignore and continue polling
     }
     await new Promise((r) => setTimeout(r, 5000));
