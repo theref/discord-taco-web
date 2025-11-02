@@ -24,9 +24,19 @@
     "check-examples": "pnpm run --parallel --aggregate-output --reporter append-only --filter './examples/**' --filter './demos/**' check"
   },
   "dependencies": {
+    "@astronautlabs/jsonpath": "^1.1.2",
     "@changesets/cli": "^2.28.1",
+    "@discordjs/util": "^1.1.1",
+    "@discordjs/ws": "^1.2.3",
+    "@nucypher/nucypher-contracts": "0.26.0-alpha.1",
     "@nucypher/nucypher-core": "^0.14.5",
-    "ethers": "^5.8.0"
+    "deep-equal": "^2.2.3",
+    "discord.js": "^14.24.1",
+    "dotenv": "^16.6.1",
+    "ethers": "^5.8.0",
+    "express": "^5.1.0",
+    "siwe": "^2.3.2",
+    "tweetnacl": "^1.0.3"
   },
   "devDependencies": {
     "@skypack/package-check": "^0.2.2",
@@ -65,6 +75,8 @@
       ]
     },
     "overrides": {
+      "@nucypher/taco": "workspace:^0.7.0-alpha.3",
+      "@nucypher/shared": "workspace:^0.6.0-alpha.2",
       "@nucypher/nucypher-core": "^0.14.5",
       "glob-parent@<5.1.2": ">=5.1.2",
       "node-forge@<1.0.0": ">=1.0.0",

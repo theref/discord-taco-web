@@ -1,4 +1,4 @@
-import { getContract } from '@nucypher/nucypher-contracts';
+import { getContractAddress } from '../address-resolver';
 import {
   BigNumber,
   ContractTransaction,
@@ -90,7 +90,7 @@ export class PreSubscriptionManagerAgent {
     signer?: ethers.Signer,
   ): Promise<SubscriptionManager> {
     const network = await provider.getNetwork();
-    const contractAddress = getContract(
+    const contractAddress = getContractAddress(
       domain,
       network.chainId,
       'SubscriptionManager',

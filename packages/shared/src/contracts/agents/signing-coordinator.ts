@@ -1,4 +1,4 @@
-import { getContract } from '@nucypher/nucypher-contracts';
+import { getContractAddress } from '../address-resolver';
 import { ethers } from 'ethers';
 
 import { Domain } from '../../porter';
@@ -11,13 +11,34 @@ type SignerInfo = {
   signature: string;
 };
 
+function getDefaultParentRpcUrl(domain: Domain): string {
+  // lynx (DEVNET) and tapir (TESTNET) parent live on Ethereum Sepolia
+  if (domain === 'lynx' || domain === 'tapir') {
+    return process.env.TACO_PARENT_RPC_URL || 'https://ethereum-sepolia-rpc.publicnode.com';
+  }
+  // mainnet domain lives on Ethereum mainnet
+  return process.env.TACO_PARENT_RPC_URL || 'https://ethereum.publicnode.com';
+}
+
+async function getParentProvider(
+  currentProvider: ethers.providers.Provider,
+  domain: Domain,
+): Promise<ethers.providers.Provider> {
+  const { chainId } = await currentProvider.getNetwork();
+  const isAlreadyParent = chainId === 1 || chainId === 11155111;
+  if (isAlreadyParent) return currentProvider;
+  return new ethers.providers.JsonRpcProvider(getDefaultParentRpcUrl(domain));
+}
+
 export class SigningCoordinatorAgent {
   public static async getParticipants(
     provider: ethers.providers.Provider,
     domain: Domain,
     cohortId: number,
   ): Promise<SignerInfo[]> {
-    const coordinator = await this.connectReadOnly(provider, domain);
+    // Read participants from parent coordinator (canonical source)
+    const parentProvider = await getParentProvider(provider, domain);
+    const coordinator = await this.connectReadOnly(parentProvider, domain);
     const participants = await coordinator.getSigners(cohortId);
 
     return participants.map(
@@ -38,7 +59,9 @@ export class SigningCoordinatorAgent {
     domain: Domain,
     cohortId: number,
   ): Promise<number> {
-    const coordinator = await this.connectReadOnly(provider, domain);
+    // Read threshold from parent coordinator (canonical source)
+    const parentProvider = await getParentProvider(provider, domain);
+    const coordinator = await this.connectReadOnly(parentProvider, domain);
     const cohort = await coordinator.signingCohorts(cohortId);
     return cohort.threshold;
   }
@@ -49,12 +72,10 @@ export class SigningCoordinatorAgent {
     cohortId: number,
     chainId: number,
   ): Promise<string> {
-    const coordinator = await this.connectReadOnly(provider, domain);
-    const cohortCondition = await coordinator.getSigningCohortConditions(
-      cohortId,
-      chainId,
-    );
-    return cohortCondition;
+    // Read cohort conditions from parent coordinator (canonical source)
+    const parentProvider = await getParentProvider(provider, domain);
+    const coordinator = await this.connectReadOnly(parentProvider, domain);
+    return await coordinator.getSigningCohortConditions(cohortId, chainId);
   }
 
   public static async setSigningCohortConditions(
@@ -79,24 +100,24 @@ export class SigningCoordinatorAgent {
     cohortId: number,
     chainId: number,
   ): Promise<string> {
-    const coordinator = await this.connectReadOnly(provider, domain);
+    const network = await provider.getNetwork();
+    let childAddress: string;
 
-    // Get the SigningCoordinatorChild contract address for this chain
-    const childAddress = await coordinator.getSigningCoordinatorChild(chainId);
+    if (network.chainId === chainId) {
+      // Already on the child chain; resolve the child coordinator directly
+      childAddress = getContractAddress(domain, chainId, 'SigningCoordinator');
+    } else {
+      // On parent; fetch the child coordinator address for the target chain
+      const coordinator = await this.connectReadOnly(provider, domain);
+      childAddress = await coordinator.getSigningCoordinatorChild(chainId);
+    }
 
-    // Create a contract instance for the child (using generic Contract interface)
     const childContract = new ethers.Contract(
       childAddress,
-      [
-        // ABI for the cohortMultisigs function
-        'function cohortMultisigs(uint32) view returns (address)',
-      ],
+      ['function cohortMultisigs(uint32) view returns (address)'],
       provider,
     );
-
-    // Get the multisig address for this cohort
-    const multisigAddress = await childContract.cohortMultisigs(cohortId);
-    return multisigAddress;
+    return await childContract.cohortMultisigs(cohortId);
   }
 
   private static async connectReadOnly(
@@ -112,10 +133,15 @@ export class SigningCoordinatorAgent {
     signer?: ethers.Signer,
   ): Promise<SigningCoordinator> {
     const network = await provider.getNetwork();
-    const contractAddress = getContract(
+    const contractAddress = getContractAddress(
       domain,
       network.chainId,
       'SigningCoordinator',
+    );
+    // Debug: print resolved coordinator address and source chain
+    // eslint-disable-next-line no-console
+    console.log(
+      `SigningCoordinator address [domain=${String(domain)} chainId=${network.chainId}]: ${contractAddress}`,
     );
     return SigningCoordinator__factory.connect(
       contractAddress,

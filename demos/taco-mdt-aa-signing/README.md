@@ -123,7 +123,7 @@ DISCORD_GUILD_ID=...              # deploy commands instantly to this guild
 COLLABLAND_ACCOUNTKIT_API_KEY=...
 TELEGRAM_BOT_TOKEN=...
 ACCOUNT_KIT_BASE_URL=https://api-qa.collab.land
-FUNDING_CHAIN_ID=11155111         # or 84532, etc.
+CHAIN_ID=11155111                 # or 84532 (Base Sepolia), etc.
 FUNDING_AMOUNT_ETH=0.001
 MIN_SA_BALANCE_ETH=0.001
 ```
