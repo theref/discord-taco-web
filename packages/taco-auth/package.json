@@ -42,7 +42,7 @@
     "@ethersproject/abstract-signer": "^5.8.0",
     "@nucypher/shared": "workspace:*",
     "siwe": "^3.0.0",
-    "zod": "^3.24.2"
+    "zod": "^4.1.12"
   },
   "devDependencies": {
     "@nucypher/test-utils": "workspace:*"
