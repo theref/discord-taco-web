@@ -1,4 +1,4 @@
-import { getContract } from '@nucypher/nucypher-contracts';
+import { getContractAddress } from '../address-resolver';
 import { ethers } from 'ethers';
 
 import { Domain } from '../../porter';
@@ -44,7 +44,7 @@ export class GlobalAllowListAgent {
     signer?: ethers.Signer,
   ): Promise<GlobalAllowList> {
     const network = await provider.getNetwork();
-    const contractAddress = getContract(
+    const contractAddress = getContractAddress(
       domain,
       network.chainId,
       'GlobalAllowList',

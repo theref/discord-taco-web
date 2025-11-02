@@ -1,4 +1,4 @@
-import { getContract } from '@nucypher/nucypher-contracts';
+import { getContractAddress } from '../address-resolver';
 import {
   DkgPublicKey,
   SessionStaticKey,
@@ -175,7 +175,11 @@ export class DkgCoordinatorAgent {
     signer?: ethers.Signer,
   ): Promise<Coordinator> {
     const network = await provider.getNetwork();
-    const contractAddress = getContract(domain, network.chainId, 'Coordinator');
+    const contractAddress = getContractAddress(
+      domain,
+      network.chainId,
+      'Coordinator',
+    );
     return Coordinator__factory.connect(contractAddress, signer ?? provider);
   }
 }
