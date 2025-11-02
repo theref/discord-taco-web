@@ -59,7 +59,7 @@
     "winston": "^3.17.0"
   },
   "devDependencies": {
-    "@types/node": "^20.17.9",
+    "@types/node": "^24.9.2",
     "tsx": "^4.20.4",
     "typescript": "^5.7.2"
   }
