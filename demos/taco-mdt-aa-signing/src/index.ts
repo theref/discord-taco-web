@@ -121,6 +121,7 @@ async function main() {
       maxFeePerGas: 3_000_000_000n,
       maxPriorityFeePerGas: 3_000_000_000n,
     };
+    const ZERO_ADDRESS = '0x0000000000000000000000000000000000000000' as `0x${string}`;
 
     console.log('🔧 Creating TACo smart account...\n');
     // No bot wallet address in EOA funding mode
@@ -429,7 +430,7 @@ async function main() {
       const userOpForHash = {
         sender: userOpShell.sender as Address,
         nonce: BigInt(userOpShell.nonce),
-        factory: (userOpShell.factory ?? '0x') as `0x${string}`,
+        factory: (userOpShell.factory ?? ZERO_ADDRESS) as `0x${string}`,
         factoryData: (userOpShell.factoryData ?? '0x') as `0x${string}`,
         callData: userOpShell.callData as `0x${string}`,
         callGasLimit: BigInt(userOpShell.callGasLimit),
@@ -437,7 +438,7 @@ async function main() {
         preVerificationGas: BigInt(userOpShell.preVerificationGas),
         maxFeePerGas: fee.maxFeePerGas as bigint,
         maxPriorityFeePerGas: fee.maxPriorityFeePerGas as bigint,
-        paymaster: (userOpShell.paymaster ?? '0x') as `0x${string}`,
+        paymaster: (userOpShell.paymaster ?? ZERO_ADDRESS) as `0x${string}`,
         paymasterVerificationGasLimit: BigInt(userOpShell.paymasterVerificationGasLimit ?? 0),
         paymasterPostOpGasLimit: BigInt(userOpShell.paymasterPostOpGasLimit ?? 0),
         paymasterData: (userOpShell.paymasterData ?? '0x') as `0x${string}`,
@@ -607,9 +608,9 @@ async function main() {
       preVerificationGas: BigInt(userOpShell.preVerificationGas),
       maxFeePerGas: fee.maxFeePerGas as bigint,
       maxPriorityFeePerGas: fee.maxPriorityFeePerGas as bigint,
-      factory: (userOpShell.factory ?? '0x') as `0x${string}`,
+      factory: (userOpShell.factory ?? ZERO_ADDRESS) as `0x${string}`,
       factoryData: (userOpShell.factoryData ?? '0x') as `0x${string}`,
-      paymaster: (userOpShell.paymaster ?? '0x') as `0x${string}`,
+      paymaster: (userOpShell.paymaster ?? ZERO_ADDRESS) as `0x${string}`,
       paymasterVerificationGasLimit: BigInt(userOpShell.paymasterVerificationGasLimit ?? 0),
       paymasterPostOpGasLimit: BigInt(userOpShell.paymasterPostOpGasLimit ?? 0),
       paymasterData: (userOpShell.paymasterData ?? '0x') as `0x${string}`,
