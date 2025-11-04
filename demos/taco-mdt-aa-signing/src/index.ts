@@ -183,7 +183,7 @@ async function main() {
 
     // Bypass smartAccount.encodeCalls; encode the cohort-expected execute ABI directly
     const ifaceExec = new ethers.utils.Interface([
-      'function execute((address,uint256,bytes))',
+      'function execute((address target,uint256 value,bytes data))',
     ]);
     const callDataForSigning = ifaceExec.encodeFunctionData('execute', [
       {
