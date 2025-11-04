@@ -173,7 +173,11 @@ async function main() {
       // ignore parse errors and keep env/defaults
     }
 
-    console.log('📝 Building user operation (offline)...');
+    console.log('📝 Building user operation (via bundler prepare)...');
+    // Gas limits to pass to prepare; keep as bigint
+    const callGasLimit = 300_000n;
+    const verificationGasLimit = 1_000_000n;
+    const preVerificationGas = 60_000n;
     const calls = [
       {
         target: tipRecipient,
@@ -183,22 +187,29 @@ async function main() {
     ];
     console.log(`💸 Transfer amount: ${ethers.utils.formatEther(transferAmount)} ETH\n`);
 
-    // Bypass smartAccount.encodeCalls; encode the cohort-expected execute ABI directly
-    const ifaceExec = new ethers.utils.Interface([
-      'function execute((address target,uint256 value,bytes data))',
-    ]);
-    const callDataForSigning = ifaceExec.encodeFunctionData('execute', [
-      {
-        target: tipRecipient,
-        value: transferAmount,
-        data: '0x',
-      },
-    ]) as `0x${string}`;
+    // Let the smart account/bundler assemble a canonical UserOperation (fixes nonce, entrypoint, format)
+    const prepared = await bundlerClient.prepareUserOperation({
+      // @ts-expect-error viem client/account types in demo
+      account: smartAccount as any,
+      calls: [
+        {
+          to: tipRecipient,
+          value: BigInt(transferAmount.toString()),
+          data: '0x' as `0x${string}`,
+        },
+      ],
+      callGasLimit,
+      verificationGasLimit,
+      preVerificationGas,
+      maxFeePerGas: fee.maxFeePerGas,
+      maxPriorityFeePerGas: fee.maxPriorityFeePerGas,
+    });
+    // prepared may be the op itself or { userOperation }
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const preparedOp: any = (prepared as any)?.userOperation ?? prepared;
+    const callDataForSigning = preparedOp.callData as `0x${string}`;
     console.log('🔎 execute((address,uint256,bytes)) selector:', callDataForSigning.slice(0, 10));
     console.log('🔎 callDataForSigning prefix:', callDataForSigning.slice(0, 18));
-    if (callDataForSigning === '0x') {
-      console.warn('⚠️  callDataForSigning is 0x; ABI validations in cohort may fail.');
-    }
 
     // Try decoding callData against common AA execute ABIs to see what we're actually sending
     try {
@@ -283,20 +294,23 @@ async function main() {
       );
     }
 
-    const callGasLimit = BigInt(300_000);
-    const verificationGasLimit = BigInt(1_000_000);
-    const preVerificationGas = BigInt(60_000);
-
+    // Build userOp shell from prepared result (includes nonce, gas, factory/paymaster if provided)
     let userOpShell = {
-      sender: smartAccount.address,
-      nonce: 0,
+      sender: String(preparedOp.sender),
+      nonce: Number(preparedOp.nonce ?? 0),
       callData: callDataForSigning,
-      callGasLimit: Number(callGasLimit),
-      verificationGasLimit: Number(verificationGasLimit),
-      preVerificationGas: Number(preVerificationGas),
-      maxFeePerGas: Number(fee.maxFeePerGas),
-      maxPriorityFeePerGas: Number(fee.maxPriorityFeePerGas),
+      callGasLimit: Number(preparedOp.callGasLimit ?? callGasLimit),
+      verificationGasLimit: Number(preparedOp.verificationGasLimit ?? verificationGasLimit),
+      preVerificationGas: Number(preparedOp.preVerificationGas ?? preVerificationGas),
+      maxFeePerGas: Number(preparedOp.maxFeePerGas ?? fee.maxFeePerGas),
+      maxPriorityFeePerGas: Number(preparedOp.maxPriorityFeePerGas ?? fee.maxPriorityFeePerGas),
       signature: '0x',
+      factory: preparedOp.factory && preparedOp.factory !== '0x' ? (preparedOp.factory as `0x${string}`) : undefined,
+      factoryData: preparedOp.factoryData && preparedOp.factoryData !== '0x' ? (preparedOp.factoryData as `0x${string}`) : undefined,
+      paymaster: preparedOp.paymaster && preparedOp.paymaster !== '0x' ? (preparedOp.paymaster as `0x${string}`) : undefined,
+      paymasterVerificationGasLimit: preparedOp.paymasterVerificationGasLimit ? Number(preparedOp.paymasterVerificationGasLimit) : undefined,
+      paymasterPostOpGasLimit: preparedOp.paymasterPostOpGasLimit ? Number(preparedOp.paymasterPostOpGasLimit) : undefined,
+      paymasterData: preparedOp.paymasterData && preparedOp.paymasterData !== '0x' ? (preparedOp.paymasterData as `0x${string}`) : undefined,
     } as {
       sender: string;
       nonce: number;
