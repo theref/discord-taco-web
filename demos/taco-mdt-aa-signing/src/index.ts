@@ -599,8 +599,7 @@ async function main() {
     );
 
     console.log('🚀 Executing transaction...');
-    // @ts-expect-error viem AA types are incompatible in this demo context
-    const userOpHash = await bundlerClient.sendUserOperation({
+    const sendParams: Record<string, unknown> = {
       account: smartAccount,
       callData: userOpShell.callData,
       callGasLimit: BigInt(userOpShell.callGasLimit),
@@ -608,15 +607,20 @@ async function main() {
       preVerificationGas: BigInt(userOpShell.preVerificationGas),
       maxFeePerGas: fee.maxFeePerGas as bigint,
       maxPriorityFeePerGas: fee.maxPriorityFeePerGas as bigint,
-      factory: (userOpShell.factory ?? ZERO_ADDRESS) as `0x${string}`,
-      factoryData: (userOpShell.factoryData ?? '0x') as `0x${string}`,
-      paymaster: (userOpShell.paymaster ?? ZERO_ADDRESS) as `0x${string}`,
-      paymasterVerificationGasLimit: BigInt(userOpShell.paymasterVerificationGasLimit ?? 0),
-      paymasterPostOpGasLimit: BigInt(userOpShell.paymasterPostOpGasLimit ?? 0),
-      paymasterData: (userOpShell.paymasterData ?? '0x') as `0x${string}`,
       signature: signature.aggregatedSignature as `0x${string}`,
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    } as any);
+    };
+    if (userOpShell.factory) {
+      sendParams.factory = userOpShell.factory as `0x${string}`;
+      sendParams.factoryData = (userOpShell.factoryData ?? '0x') as `0x${string}`;
+    }
+    if (userOpShell.paymaster) {
+      sendParams.paymaster = userOpShell.paymaster as `0x${string}`;
+      sendParams.paymasterVerificationGasLimit = BigInt(userOpShell.paymasterVerificationGasLimit ?? 0);
+      sendParams.paymasterPostOpGasLimit = BigInt(userOpShell.paymasterPostOpGasLimit ?? 0);
+      sendParams.paymasterData = (userOpShell.paymasterData ?? '0x') as `0x${string}`;
+    }
+    // @ts-expect-error viem AA types are incompatible in this demo context
+    const userOpHash = await bundlerClient.sendUserOperation(sendParams as any);
     console.log(`📝 UserOp Hash: ${userOpHash}`);
 
     const { receipt } = await bundlerClient.waitForUserOperationReceipt({
