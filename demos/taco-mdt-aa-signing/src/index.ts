@@ -327,17 +327,29 @@ async function main() {
       }
     } catch {}
 
-    // Sponsor with paymaster BEFORE signing so signed op == sent op
+    // Sponsor with paymaster BEFORE signing (Pimlico-style pm_sponsorUserOperation) so signed op == sent op
     try {
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
       const entryPointForSponsor = (process.env.ENTRYPOINT_ADDRESS as `0x${string}` | undefined) || (smartAccount as any)?.entryPoint;
-      if (entryPointForSponsor) {
-        // eslint-disable-next-line @typescript-eslint/no-explicit-any
-        const sponsorship: any = await paymasterClient.sponsorUserOperation({
-          userOperation: { ...userOpShell, signature: '0x' } as unknown as Record<string, unknown>,
-          entryPoint: entryPointForSponsor as `0x${string}`,
+      if (entryPointForSponsor && process.env.BUNDLER_URL) {
+        const sponsorReq = {
+          jsonrpc: '2.0',
+          id: 1,
+          method: 'pm_sponsorUserOperation',
+          params: [
+            { ...userOpShell, signature: '0x' },
+            entryPointForSponsor,
+            {},
+          ],
+        };
+        const resp = await fetch(process.env.BUNDLER_URL, {
+          method: 'POST',
+          headers: { 'content-type': 'application/json' },
+          body: JSON.stringify(sponsorReq),
         });
-        if (sponsorship) {
+        const json = await resp.json();
+        const sponsorship = json?.result;
+        if (sponsorship && typeof sponsorship === 'object') {
           if (sponsorship.paymaster) userOpShell.paymaster = sponsorship.paymaster as `0x${string}`;
           if (sponsorship.paymasterData) userOpShell.paymasterData = sponsorship.paymasterData as `0x${string}`;
           if (sponsorship.paymasterVerificationGasLimit != null) userOpShell.paymasterVerificationGasLimit = Number(sponsorship.paymasterVerificationGasLimit);
@@ -599,6 +611,7 @@ async function main() {
     );
 
     console.log('🚀 Executing transaction...');
+    // Prepare send params conditionally (omit optional fields if absent)
     const sendParams: Record<string, unknown> = {
       account: smartAccount,
       callData: userOpShell.callData,
