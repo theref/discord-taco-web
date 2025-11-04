@@ -117,8 +117,8 @@ async function main() {
     });
 
     const fee = {
-      maxFeePerGas: parseEther('0.00001'),
-      maxPriorityFeePerGas: parseEther('0.000001'),
+      maxFeePerGas: 1_100_000n,
+      maxPriorityFeePerGas: 1_100_000n,
     };
 
     console.log('🔧 Creating TACo smart account...\n');
@@ -183,14 +183,16 @@ async function main() {
 
     // Bypass smartAccount.encodeCalls; encode the cohort-expected execute ABI directly
     const ifaceExec = new ethers.utils.Interface([
-      'function execute(address to,uint256 value,bytes data)',
+      'function execute((address,uint256,bytes))',
     ]);
     const callDataForSigning = ifaceExec.encodeFunctionData('execute', [
-      tipRecipient,
-      transferAmount,
-      '0x',
+      {
+        target: tipRecipient,
+        value: transferAmount,
+        data: '0x',
+      },
     ]) as `0x${string}`;
-    console.log('🔎 execute(to,value,data) selector:', callDataForSigning.slice(0, 10));
+    console.log('🔎 execute((address,uint256,bytes)) selector:', callDataForSigning.slice(0, 10));
     console.log('🔎 callDataForSigning prefix:', callDataForSigning.slice(0, 18));
     if (callDataForSigning === '0x') {
       console.warn('⚠️  callDataForSigning is 0x; ABI validations in cohort may fail.');
@@ -200,6 +202,13 @@ async function main() {
     try {
       const decodedResults: Array<{ label: string; ok: boolean; error?: string; args?: unknown }>= [];
       const candidates: Array<{ label: string; iface: ethers.utils.Interface; fn: string }>= [
+        {
+          label: 'execute((address,uint256,bytes))',
+          iface: new ethers.utils.Interface([
+            'function execute((address,uint256,bytes))'
+          ]),
+          fn: 'execute',
+        },
         {
           label: 'execute(address to,uint256 value,bytes data)',
           iface: new ethers.utils.Interface([
@@ -272,9 +281,9 @@ async function main() {
       );
     }
 
-    const callGasLimit = BigInt(500_000);
-    const verificationGasLimit = BigInt(600_000);
-    const preVerificationGas = BigInt(120_000);
+    const callGasLimit = BigInt(300_000);
+    const verificationGasLimit = BigInt(1_000_000);
+    const preVerificationGas = BigInt(60_000);
 
     const userOpShell = {
       sender: smartAccount.address,
