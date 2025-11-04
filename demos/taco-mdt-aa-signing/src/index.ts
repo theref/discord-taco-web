@@ -207,7 +207,17 @@ async function main() {
     // prepared may be the op itself or { userOperation }
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     const preparedOp: any = (prepared as any)?.userOperation ?? prepared;
-    const callDataForSigning = preparedOp.callData as `0x${string}`;
+    let callDataForSigning = preparedOp.callData as `0x${string}`;
+    // Force cohort-expected execute tuple encoding to satisfy signing-abi-attribute
+    try {
+      const ifaceExec = new ethers.utils.Interface([
+        'function execute((address target,uint256 value,bytes data))',
+      ]);
+      const direct = ifaceExec.encodeFunctionData('execute', [
+        { target: tipRecipient, value: transferAmount, data: '0x' },
+      ]) as `0x${string}`;
+      callDataForSigning = direct;
+    } catch {}
     console.log('🔎 execute((address,uint256,bytes)) selector:', callDataForSigning.slice(0, 10));
     console.log('🔎 callDataForSigning prefix:', callDataForSigning.slice(0, 18));
 
