@@ -117,8 +117,9 @@ async function main() {
     });
 
     const fee = {
-      maxFeePerGas: 1_100_000n,
-      maxPriorityFeePerGas: 1_100_000n,
+      // 3 gwei
+      maxFeePerGas: 3_000_000_000n,
+      maxPriorityFeePerGas: 3_000_000_000n,
     };
 
     console.log('🔧 Creating TACo smart account...\n');
@@ -285,23 +286,67 @@ async function main() {
     const verificationGasLimit = BigInt(1_000_000);
     const preVerificationGas = BigInt(60_000);
 
-    const userOpShell = {
+    let userOpShell = {
       sender: smartAccount.address,
       nonce: 0,
-      factory: '0x',
-      factoryData: '0x',
       callData: callDataForSigning,
       callGasLimit: Number(callGasLimit),
       verificationGasLimit: Number(verificationGasLimit),
       preVerificationGas: Number(preVerificationGas),
       maxFeePerGas: Number(fee.maxFeePerGas),
       maxPriorityFeePerGas: Number(fee.maxPriorityFeePerGas),
-      paymaster: '0x',
-      paymasterVerificationGasLimit: 0,
-      paymasterPostOpGasLimit: 0,
-      paymasterData: '0x',
       signature: '0x',
-    } as const;
+    } as {
+      sender: string;
+      nonce: number;
+      factory?: `0x${string}`;
+      factoryData?: `0x${string}`;
+      callData: `0x${string}`;
+      callGasLimit: number;
+      verificationGasLimit: number;
+      preVerificationGas: number;
+      maxFeePerGas: number;
+      maxPriorityFeePerGas: number;
+      paymaster?: `0x${string}`;
+      paymasterVerificationGasLimit?: number;
+      paymasterPostOpGasLimit?: number;
+      paymasterData?: `0x${string}`;
+      signature: `0x${string}`;
+    };
+
+    // If undeployed, include factory + factoryData derived from initCode (EIP-4337 v0.7)
+    try {
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      const initCode = (await (smartAccount as any)?.getInitCode?.()) as `0x${string}` | undefined;
+      if (initCode && initCode !== '0x' && initCode.length > 2 + 40) {
+        const factory = (`0x${initCode.slice(2, 42)}`) as `0x${string}`;
+        const factoryData = (`0x${initCode.slice(42)}`) as `0x${string}`;
+        userOpShell.factory = factory;
+        userOpShell.factoryData = factoryData;
+      }
+    } catch {}
+
+    // Sponsor with paymaster BEFORE signing so signed op == sent op
+    try {
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      const entryPointForSponsor = (process.env.ENTRYPOINT_ADDRESS as `0x${string}` | undefined) || (smartAccount as any)?.entryPoint;
+      if (entryPointForSponsor) {
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        const sponsorship: any = await paymasterClient.sponsorUserOperation({
+          userOperation: { ...userOpShell, signature: '0x' } as unknown as Record<string, unknown>,
+          entryPoint: entryPointForSponsor as `0x${string}`,
+        });
+        if (sponsorship) {
+          if (sponsorship.paymaster) userOpShell.paymaster = sponsorship.paymaster as `0x${string}`;
+          if (sponsorship.paymasterData) userOpShell.paymasterData = sponsorship.paymasterData as `0x${string}`;
+          if (sponsorship.paymasterVerificationGasLimit != null) userOpShell.paymasterVerificationGasLimit = Number(sponsorship.paymasterVerificationGasLimit);
+          if (sponsorship.paymasterPostOpGasLimit != null) userOpShell.paymasterPostOpGasLimit = Number(sponsorship.paymasterPostOpGasLimit);
+          if (sponsorship.preVerificationGas != null) userOpShell.preVerificationGas = Number(sponsorship.preVerificationGas);
+        }
+      }
+    } catch (e) {
+      console.warn('⚠️  Paymaster sponsorship skipped/failed:', (e as Error)?.message || String(e));
+    }
 
     // Print raw cohort condition for debugging schema mismatches
     try {
@@ -382,22 +427,20 @@ async function main() {
   try {
     if (entryPointAddress) {
       const userOpForHash = {
-        sender: smartAccount.address as Address,
-        nonce: 0n,
-        factory: userOpShell.factory as `0x${string}`,
-        factoryData: userOpShell.factoryData as `0x${string}`,
+        sender: userOpShell.sender as Address,
+        nonce: BigInt(userOpShell.nonce),
+        factory: (userOpShell.factory ?? '0x') as `0x${string}`,
+        factoryData: (userOpShell.factoryData ?? '0x') as `0x${string}`,
         callData: userOpShell.callData as `0x${string}`,
         callGasLimit: BigInt(userOpShell.callGasLimit),
         verificationGasLimit: BigInt(userOpShell.verificationGasLimit),
         preVerificationGas: BigInt(userOpShell.preVerificationGas),
         maxFeePerGas: fee.maxFeePerGas as bigint,
         maxPriorityFeePerGas: fee.maxPriorityFeePerGas as bigint,
-        paymaster: userOpShell.paymaster as `0x${string}`,
-        paymasterVerificationGasLimit: BigInt(
-          userOpShell.paymasterVerificationGasLimit,
-        ),
-        paymasterPostOpGasLimit: BigInt(userOpShell.paymasterPostOpGasLimit),
-        paymasterData: userOpShell.paymasterData as `0x${string}`,
+        paymaster: (userOpShell.paymaster ?? '0x') as `0x${string}`,
+        paymasterVerificationGasLimit: BigInt(userOpShell.paymasterVerificationGasLimit ?? 0),
+        paymasterPostOpGasLimit: BigInt(userOpShell.paymasterPostOpGasLimit ?? 0),
+        paymasterData: (userOpShell.paymasterData ?? '0x') as `0x${string}`,
         signature: '0x' as `0x${string}`,
       } as const;
 
@@ -558,18 +601,18 @@ async function main() {
     // @ts-expect-error viem AA types are incompatible in this demo context
     const userOpHash = await bundlerClient.sendUserOperation({
       account: smartAccount,
-      callData: callDataForSigning,
-      callGasLimit,
-      verificationGasLimit,
-      preVerificationGas,
+      callData: userOpShell.callData,
+      callGasLimit: BigInt(userOpShell.callGasLimit),
+      verificationGasLimit: BigInt(userOpShell.verificationGasLimit),
+      preVerificationGas: BigInt(userOpShell.preVerificationGas),
       maxFeePerGas: fee.maxFeePerGas as bigint,
       maxPriorityFeePerGas: fee.maxPriorityFeePerGas as bigint,
-      factory: userOpShell.factory,
-      factoryData: userOpShell.factoryData,
-      paymaster: userOpShell.paymaster,
-      paymasterVerificationGasLimit: BigInt(userOpShell.paymasterVerificationGasLimit),
-      paymasterPostOpGasLimit: BigInt(userOpShell.paymasterPostOpGasLimit),
-      paymasterData: userOpShell.paymasterData as `0x${string}`,
+      factory: (userOpShell.factory ?? '0x') as `0x${string}`,
+      factoryData: (userOpShell.factoryData ?? '0x') as `0x${string}`,
+      paymaster: (userOpShell.paymaster ?? '0x') as `0x${string}`,
+      paymasterVerificationGasLimit: BigInt(userOpShell.paymasterVerificationGasLimit ?? 0),
+      paymasterPostOpGasLimit: BigInt(userOpShell.paymasterPostOpGasLimit ?? 0),
+      paymasterData: (userOpShell.paymasterData ?? '0x') as `0x${string}`,
       signature: signature.aggregatedSignature as `0x${string}`,
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
     } as any);
