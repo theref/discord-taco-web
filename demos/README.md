@@ -1,6 +1,0 @@
-# `@nucypher/*` Demos
-
-- [`taco-demo`](./taco-demo) - A demo of the `@nucypher/taco` library.
-- [`taco-nft-demo`](./taco-nft-demo) - A demo an NFT-based condition using the
-  `@nucypher/taco` library.
-- [`taco-mdt-aa-signing`](./taco-mdt-aa-signing) - A demo showing TACo distributed signing with MetaMask Delegation Toolkit Account Abstraction wallets.
