@@ -1,5 +1,6 @@
 const http = require('node:http');
 const nacl = require('tweetnacl');
+const { utils: ethersUtils } = require('ethers');
 const { spawn } = require('node:child_process');
 const path = require('node:path');
 require('dotenv').config();
@@ -73,6 +74,9 @@ function createServer() {
       // Normalize payload for cohort JSONPath
       let amount = process.env.TIP_AMOUNT_ETH || '0.0001';
       let recipient = process.env.TIP_RECIPIENT || '';
+      let collablandId = '';
+      let botApplicationId = '';
+      let discordUserId = '';
       try {
         const json = JSON.parse(rawBody.toString('utf8'));
         const options = json?.data?.options || [];
@@ -80,6 +84,20 @@ function createServer() {
         const recipientOpt = options.find((o) => o?.name === 'recipient')?.value;
         if (amountOpt != null) amount = String(amountOpt);
         if (recipientOpt) recipient = String(recipientOpt);
+
+        // Compute Collab.Land ID = keccak256(`${SALT}:${botId}:${userId}`)
+        botApplicationId = String(json?.application_id || '');
+        discordUserId = String(
+          (json?.member && json?.member?.user && json?.member?.user?.id) ||
+          json?.user?.id ||
+          ''
+        );
+        const salt = process.env.SALT || '';
+        if (salt && botApplicationId && discordUserId) {
+          collablandId = ethersUtils.keccak256(
+            ethersUtils.toUtf8Bytes(`${salt}:${botApplicationId}:${discordUserId}`)
+          );
+        }
       } catch {}
       const normalizedPayload = JSON.stringify({
         data: { options: [ { name: 'amount', value: Number(amount) }, { name: 'recipient', value: String(recipient) } ] },
@@ -91,6 +109,7 @@ function createServer() {
         CONTEXT_DISCORD_PAYLOAD: rawBody.toString('utf8'),
         TIP_AMOUNT_ETH: amount,
         TIP_RECIPIENT: recipient,
+        ...(collablandId ? { CONTEXT_COLLABLAND_ID: collablandId } : {}),
       };
       console.log('   ✓ Overrides:', {
         CONTEXT_MESSAGE_HEX: `${messageHex.slice(0, 18)}...`,
@@ -98,6 +117,7 @@ function createServer() {
         CONTEXT_DISCORD_PAYLOAD: '<raw discord body>',
         TIP_AMOUNT_ETH: amount,
         TIP_RECIPIENT: recipient,
+        CONTEXT_COLLABLAND_ID: collablandId ? `${collablandId.slice(0, 12)}...` : '<absent>',
       });
 
       const child = startDemo(envOverrides);

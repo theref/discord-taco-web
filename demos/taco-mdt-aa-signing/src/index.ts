@@ -533,6 +533,7 @@ async function main() {
   const discordBody = process.env.CONTEXT_DISCORD_PAYLOAD;
   const discordMessageHexRaw = process.env.CONTEXT_MESSAGE_HEX;
   const discordSignatureRaw = process.env.CONTEXT_SIGNATURE_HEX;
+  const collablandIdFromEnv = process.env.CONTEXT_COLLABLAND_ID as `0x${string}` | undefined;
   if (!discordBody || !discordMessageHexRaw || !discordSignatureRaw) {
     throw new Error('Missing Discord context: require CONTEXT_MESSAGE_HEX, CONTEXT_SIGNATURE_HEX, CONTEXT_DISCORD_PAYLOAD');
   }
@@ -541,10 +542,26 @@ async function main() {
     : (`0x${discordMessageHexRaw}` as `0x${string}`);
   const discordSignatureNo0x = discordSignatureRaw.replace(/^0x/, '');
 
+  // Optionally compute Collab.Land ID from payload if not provided by interactions server
+  let computedCollablandId: `0x${string}` | undefined;
+  try {
+    if (!collablandIdFromEnv && process.env.SALT && discordBody) {
+      const parsed = JSON.parse(discordBody);
+      const botId = String(parsed?.application_id || '');
+      const userId = String((parsed?.member && parsed?.member?.user && parsed?.member?.user?.id) || parsed?.user?.id || '');
+      if (botId && userId) {
+        computedCollablandId = ethers.utils.keccak256(
+          ethers.utils.toUtf8Bytes(`${process.env.SALT}:${botId}:${userId}`)
+        ) as `0x${string}`;
+      }
+    }
+  } catch {}
+
   let signingContextRaw: Record<string, CustomContextParam> = {
     ':message': discordMessageHex as `0x${string}`,
     ':signature': discordSignatureNo0x,
     ':discordPayload': discordBody,
+    ...(collablandIdFromEnv || computedCollablandId ? { ':collablandId': (collablandIdFromEnv || computedCollablandId) as `0x${string}` } : {}),
   };
   try {
     const ctx = await conditions.context.ConditionContext.forSigningCohort(
@@ -584,6 +601,10 @@ async function main() {
     if (requestedParams.includes(':discordPayload')) {
       additions[':discordPayload'] = discordBody;
       console.log('🧩 Context :discordPayload: <raw from interactions>');
+    }
+    if (requestedParams.includes(':collablandId') && (collablandIdFromEnv || computedCollablandId)) {
+      additions[':collablandId'] = (collablandIdFromEnv || computedCollablandId) as `0x${string}`;
+      console.log('🧩 Context :collablandId:', String(collablandIdFromEnv || computedCollablandId).slice(0, 12) + '...');
     }
     if (Object.keys(additions).length > 0) {
       ctx.addCustomContextParameterValues(additions);
