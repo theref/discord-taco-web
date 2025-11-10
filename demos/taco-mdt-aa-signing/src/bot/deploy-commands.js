@@ -17,8 +17,8 @@ const commands = [
       },
       {
         name: 'recipient',
-        description: 'Recipient address (0x...)',
-        type: ApplicationCommandOptionType.String,
+        description: 'Discord user to receive the tip',
+        type: ApplicationCommandOptionType.User,
         required: true,
       },
     ],
@@ -46,5 +46,3 @@ const commands = [
   );
   console.log(`✓ Deployed /tip to guild ${guildId}`);
 })();
-
-
