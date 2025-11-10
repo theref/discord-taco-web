@@ -86,6 +86,38 @@ async function createMetaMaskSmartAccountWithTaco(
   return smartAccount;
 }
 
+/**
+ * Derives deterministic AA address for a Discord user.
+ * Uses Collab.Land ID scheme: keccak256("SALT:BOT_APP_ID:DISCORD_USER_ID")
+ */
+async function deriveDiscordUserAA(
+  publicClient: unknown,
+  provider: ethers.providers.JsonRpcProvider,
+  discordUserId: string,
+  botApplicationId: string,
+): Promise<Address> {
+  const { signers, threshold, cohortMultisigAddress } = await getTacoCohortInfo(provider);
+
+  // Compute Collab.Land ID as deploySalt for deterministic address
+  const salt = process.env.SALT;
+  if (!salt) {
+    throw new Error('Missing SALT environment variable');
+  }
+  const collablandId = ethers.utils.keccak256(
+    ethers.utils.toUtf8Bytes(`${salt}:${botApplicationId}:${discordUserId}`)
+  ) as `0x${string}`;
+
+  const smartAccount = await createMetaMaskSmartAccountWithTaco(
+    publicClient,
+    signers,
+    threshold,
+    cohortMultisigAddress as Address,
+    collablandId,
+  );
+
+  return smartAccount.address;
+}
+
 async function createTacoSmartAccount(
   publicClient: unknown,
   provider: ethers.providers.JsonRpcProvider,
