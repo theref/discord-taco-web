@@ -60,28 +60,46 @@ async function getTacoCohortInfo(provider: ethers.providers.JsonRpcProvider) {
   return { participants, threshold, signers, cohortMultisigAddress };
 }
 
-async function createTacoSmartAccount(
+/**
+ * Creates a MetaMask smart account using TACo cohort configuration
+ */
+async function createMetaMaskSmartAccountWithTaco(
   publicClient: unknown,
-  provider: ethers.providers.JsonRpcProvider,
+  signers: Address[],
+  threshold: number,
+  cohortMultisigAddress: Address,
+  deploySalt: `0x${string}`,
 ) {
-  const { signers, threshold, cohortMultisigAddress } = await getTacoCohortInfo(provider);
+  const tacoAccount = createViemTacoAccount(cohortMultisigAddress);
 
-  // Create a TACo account using the cohort's multisig address
-  // This satisfies MetaMask's signatory requirement and uses the proper cohort multisig
-  const tacoAccount = createViemTacoAccount(cohortMultisigAddress as Address);
-  console.log(`🎯 Using cohort multisig: ${cohortMultisigAddress}`);
-
-  // Type mismatch between viem client and delegation-toolkit expected client.
   // @ts-expect-error Incompatible viem Client type; safe at runtime for this demo
   const smartAccount = await toMetaMaskSmartAccount({
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     client: publicClient as any,
     implementation: Implementation.MultiSig,
     deployParams: [signers, BigInt(threshold)],
-    deploySalt: '0x' as `0x${string}`,
+    deploySalt,
     signatory: [{ account: tacoAccount }],
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   } as unknown as any);
+
+  return smartAccount;
+}
+
+async function createTacoSmartAccount(
+  publicClient: unknown,
+  provider: ethers.providers.JsonRpcProvider,
+) {
+  const { signers, threshold, cohortMultisigAddress } = await getTacoCohortInfo(provider);
+  console.log(`🎯 Using cohort multisig: ${cohortMultisigAddress}`);
+
+  const smartAccount = await createMetaMaskSmartAccountWithTaco(
+    publicClient,
+    signers,
+    threshold,
+    cohortMultisigAddress as Address,
+    '0x' as `0x${string}`,
+  );
 
   return { smartAccount, threshold };
 }
