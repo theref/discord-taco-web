@@ -71,53 +71,32 @@ function createServer() {
 
       const messageHex = '0x' + Buffer.concat([Buffer.from(String(ts),'utf8'), rawBody]).toString('hex');
 
-      // Normalize payload for cohort JSONPath
+      // Extract tip parameters from Discord payload
       let amount = process.env.TIP_AMOUNT_ETH || '0.0001';
-      let recipient = process.env.TIP_RECIPIENT || '';
-      let collablandId = '';
-      let botApplicationId = '';
-      let discordUserId = '';
+      let recipientUserId = '';
       try {
         const json = JSON.parse(rawBody.toString('utf8'));
         const options = json?.data?.options || [];
         const amountOpt = options.find((o) => o?.name === 'amount')?.value;
         const recipientOpt = options.find((o) => o?.name === 'recipient')?.value;
         if (amountOpt != null) amount = String(amountOpt);
-        if (recipientOpt) recipient = String(recipientOpt);
-
-        // Compute Collab.Land ID = keccak256(`${SALT}:${botId}:${userId}`)
-        botApplicationId = String(json?.application_id || '');
-        discordUserId = String(
-          (json?.member && json?.member?.user && json?.member?.user?.id) ||
-          json?.user?.id ||
-          ''
-        );
-        const salt = process.env.SALT || '';
-        if (salt && botApplicationId && discordUserId) {
-          collablandId = ethersUtils.keccak256(
-            ethersUtils.toUtf8Bytes(`${salt}:${botApplicationId}:${discordUserId}`)
-          );
-        }
+        // recipient is now a User type, so value contains the user ID
+        if (recipientOpt) recipientUserId = String(recipientOpt);
       } catch {}
-      const normalizedPayload = JSON.stringify({
-        data: { options: [ { name: 'amount', value: Number(amount) }, { name: 'recipient', value: String(recipient) } ] },
-      });
 
       const envOverrides = {
         CONTEXT_MESSAGE_HEX: messageHex,
         CONTEXT_SIGNATURE_HEX: String(sig).replace(/^0x/, ''),
         CONTEXT_DISCORD_PAYLOAD: rawBody.toString('utf8'),
         TIP_AMOUNT_ETH: amount,
-        TIP_RECIPIENT: recipient,
-        ...(collablandId ? { CONTEXT_COLLABLAND_ID: collablandId } : {}),
+        TIP_RECIPIENT_USER_ID: recipientUserId,
       };
       console.log('   ✓ Overrides:', {
         CONTEXT_MESSAGE_HEX: `${messageHex.slice(0, 18)}...`,
         CONTEXT_SIGNATURE_HEX: `${String(sig).slice(0, 18)}...`,
         CONTEXT_DISCORD_PAYLOAD: '<raw discord body>',
         TIP_AMOUNT_ETH: amount,
-        TIP_RECIPIENT: recipient,
-        CONTEXT_COLLABLAND_ID: collablandId ? `${collablandId.slice(0, 12)}...` : '<absent>',
+        TIP_RECIPIENT_USER_ID: recipientUserId,
       });
 
       const child = startDemo(envOverrides);
@@ -142,5 +121,3 @@ function createServer() {
 }
 
 module.exports = { createServer };
-
-
