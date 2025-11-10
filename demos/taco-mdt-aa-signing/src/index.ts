@@ -34,10 +34,10 @@ const SIGNING_CHAIN_ID = parseInt(process.env.SIGNING_CHAIN_ID || String((proces
 const COHORT_ID = parseInt(process.env.COHORT_ID || '1', 10);
 const AA_VERSION = 'mdt';
 
-async function createTacoSmartAccount(
-  publicClient: unknown,
-  provider: ethers.providers.JsonRpcProvider,
-) {
+/**
+ * Fetches TACo cohort configuration - shared by all AA creation functions
+ */
+async function getTacoCohortInfo(provider: ethers.providers.JsonRpcProvider) {
   await initialize();
   const participants = await SigningCoordinatorAgent.getParticipants(
     provider,
@@ -50,15 +50,21 @@ async function createTacoSmartAccount(
     COHORT_ID,
   );
   const signers = participants.map((p) => p.operator as Address).sort();
+  const cohortMultisigAddress = await SigningCoordinatorAgent.getCohortMultisigAddress(
+    provider,
+    TACO_DOMAIN,
+    COHORT_ID,
+    CHAIN_ID,
+  );
 
-  // Get the cohort's actual multisig contract address
-  const cohortMultisigAddress =
-    await SigningCoordinatorAgent.getCohortMultisigAddress(
-      provider,
-      TACO_DOMAIN,
-      COHORT_ID,
-      CHAIN_ID,
-    );
+  return { participants, threshold, signers, cohortMultisigAddress };
+}
+
+async function createTacoSmartAccount(
+  publicClient: unknown,
+  provider: ethers.providers.JsonRpcProvider,
+) {
+  const { signers, threshold, cohortMultisigAddress } = await getTacoCohortInfo(provider);
 
   // Create a TACo account using the cohort's multisig address
   // This satisfies MetaMask's signatory requirement and uses the proper cohort multisig
