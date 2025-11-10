@@ -249,18 +249,12 @@ async function main() {
     console.log(`✅ Recipient AA address: ${tipRecipient}\n`);
 
     console.log('📝 Building user operation (via bundler prepare)...');
+    console.log(`💸 Transfer amount: ${ethers.utils.formatEther(transferAmount)} ETH\n`);
+
     // Gas limits to pass to prepare; keep as bigint
     const callGasLimit = 300_000n;
     const verificationGasLimit = 1_000_000n;
     const preVerificationGas = 60_000n;
-    const calls = [
-      {
-        target: tipRecipient,
-          value: BigInt(transferAmount.toString()),
-          data: '0x' as `0x${string}`,
-        },
-    ];
-    console.log(`💸 Transfer amount: ${ethers.utils.formatEther(transferAmount)} ETH\n`);
 
     // Let the smart account/bundler assemble a canonical UserOperation (fixes nonce, entrypoint, format)
     const prepared = await bundlerClient.prepareUserOperation({
