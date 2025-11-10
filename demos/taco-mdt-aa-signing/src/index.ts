@@ -211,23 +211,42 @@ async function main() {
       await logBalances(provider, localAccount.address, smartAccount.address);
     }
 
-    // Derive tip parameters from Discord payload if available to guarantee match
-    let tipRecipient: Address = (process.env.TIP_RECIPIENT as Address) || (localAccount.address as Address);
-    // Amount is provided in ETH (string) via env or Discord; parse to wei
+    // Derive tip recipient's AA address from their Discord user ID
+    let tipRecipient: Address;
     let transferAmount = ethers.utils.parseEther(process.env.TIP_AMOUNT_ETH || '0.0001');
-    try {
-      const rawDiscord = process.env.CONTEXT_DISCORD_PAYLOAD;
-      if (rawDiscord) {
-        const parsed = JSON.parse(rawDiscord);
-        const opts = parsed?.data?.options || [];
-        const amtOpt = opts.find((o: any) => o?.name === 'amount');
-        const rcptOpt = opts.find((o: any) => o?.name === 'recipient');
-        if (amtOpt?.value != null) transferAmount = ethers.utils.parseEther(String(amtOpt.value));
-        if (rcptOpt?.value) tipRecipient = rcptOpt.value as Address;
-      }
-    } catch {
-      // ignore parse errors and keep env/defaults
+
+    const recipientUserId = process.env.TIP_RECIPIENT_USER_ID;
+    if (!recipientUserId) {
+      throw new Error('Missing TIP_RECIPIENT_USER_ID - must provide Discord user ID');
     }
+
+    // Extract bot application ID from Discord payload
+    const rawDiscord = process.env.CONTEXT_DISCORD_PAYLOAD;
+    if (!rawDiscord) {
+      throw new Error('Missing CONTEXT_DISCORD_PAYLOAD');
+    }
+
+    const parsed = JSON.parse(rawDiscord);
+    const botApplicationId = String(parsed?.application_id || '');
+    if (!botApplicationId) {
+      throw new Error('Missing application_id in Discord payload');
+    }
+
+    // Parse amount from payload
+    const opts = parsed?.data?.options || [];
+    const amtOpt = opts.find((o: any) => o?.name === 'amount');
+    if (amtOpt?.value != null) {
+      transferAmount = ethers.utils.parseEther(String(amtOpt.value));
+    }
+
+    console.log(`🔍 Deriving AA address for Discord user ${recipientUserId}...`);
+    tipRecipient = await deriveDiscordUserAA(
+      publicClient,
+      provider,
+      recipientUserId,
+      botApplicationId,
+    );
+    console.log(`✅ Recipient AA address: ${tipRecipient}\n`);
 
     console.log('📝 Building user operation (via bundler prepare)...');
     // Gas limits to pass to prepare; keep as bigint
