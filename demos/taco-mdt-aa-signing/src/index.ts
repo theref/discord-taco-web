@@ -49,7 +49,7 @@ async function getTacoCohortInfo(provider: ethers.providers.JsonRpcProvider) {
     TACO_DOMAIN,
     COHORT_ID,
   );
-  const signers = participants.map((p) => p.operator as Address).sort();
+  const signers = participants.map((p) => p.signerAddress as Address).sort();
   const cohortMultisigAddress = await SigningCoordinatorAgent.getCohortMultisigAddress(
     provider,
     TACO_DOMAIN,
