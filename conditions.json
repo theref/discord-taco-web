@@ -43,8 +43,8 @@
               "data": ":discordPayload",
               "query": "$.data.options[?(@.name == \"recipient\")].value",
               "returnValueTest": {
-                "comparator": "!=",
-                "value": ""
+                "comparator": ">",
+                "value": 0
               }
             },
             "operations": [
