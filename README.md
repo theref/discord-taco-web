@@ -1,43 +1,60 @@
-# taco-web
+# TACo AA Signing Demo
 
-A TypeScript library for interacting with access control functionality in the browser.
+A demo showing TACo distributed signing with Account Abstraction (MetaMask Delegation Toolkit) and Discord integration.
 
-Full documentation can be found [here](https://docs.taco.build/).
+## Overview
 
-> **Warning**
->
-> `taco-web` is under [active development](https://github.com/nucypher/taco-web/pulls):
->
-> - We expect breaking changes.
+This demo demonstrates:
+- TACo distributed key signing for Account Abstraction UserOperations
+- MetaMask Delegation Toolkit smart accounts with threshold multisig
+- Discord `/tip` slash command that triggers on-chain transfers
+- Deterministic AA address derivation from Discord user IDs
 
-## Installation
+## Setup
+
+1. Install dependencies:
+```bash
+pnpm install
+```
+
+2. Copy `.env.example` to `.env` and fill in the required values.
+
+3. Deploy the Discord slash command:
+```bash
+pnpm bot:deploy
+```
+
+4. Start the Discord interactions server:
+```bash
+pnpm bot:dev
+```
+
+## Environment Variables
+
+See `.env.example` for the full list. Key variables:
+
+- `PRIVATE_KEY` - EOA private key for funding
+- `ETH_RPC_URL` - Ethereum Sepolia RPC (L1 for SigningCoordinator)
+- `SIGNING_CHAIN_RPC_URL` - Base Sepolia RPC (L2 signing chain)
+- `BUNDLER_URL` - Bundler/Paymaster URL
+- `DISCORD_*` - Discord bot configuration
+- `TACO_DOMAIN` - TACo domain (e.g., `DEVNET`)
+- `COHORT_ID` - TACo cohort ID
+
+## Scripts
+
+- `pnpm start` - Run the signing demo directly
+- `pnpm bot:dev` - Start Discord interactions server
+- `pnpm bot:deploy` - Deploy `/tip` command to Discord
+
+## Architecture
 
 ```
-pnpm add @nucypher/taco
+src/
+  index.ts          - Main demo: AA creation, UserOp signing, execution
+  taco-account.ts   - Viem account adapter for TACo cohort
+  bot/
+    index.js        - Discord bot entry point
+    interactions.js - HTTP webhook handler for Discord
+    deploy-commands.js - Slash command deployment
 ```
-
-## Tutorial
-
-To learn more, follow the tutorial at Threshold
-Network's [docs](https://docs.taco.build/taco-integration/).
-
-## Examples
-
-See [`taco-web/examples`](https://github.com/nucypher/taco-web/tree/main/examples) to find out how to
-integrate `taco-web` into your favorite web framework.
-
-We also provide demos of TACo applications:
-
-- [taco-demo](https://github.com/nucypher/taco-web/tree/main/demos/taco-demo)
-- [taco-nft-demo](https://github.com/nucypher/taco-web/tree/main/demos/taco-nft-demo)
-
-These examples showcase integration with web applications utilizing an end-to-end flow of creating encrypted data with associated conditions and enacting access-controlled decryption.
-
-## Condition Schemas
-
-Learn more about the available condition schemas and their properties. You may check the [condition schema documentation](./packages/taco/schema-docs/condition-schemas.md) for detailed information on each schema type.
-
-# Contributing
-
-If you would like to contribute to the development of `taco-web`, please see our [Contributing Guide](CONTRIBUTING.md).
-You can also join our [Discord](https://discord.gg/threshold) and say hello!

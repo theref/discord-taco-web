@@ -1,6 +1,0 @@
-{
-  "extends": ["./typedoc.base.json"],
-  "entryPoints": ["packages/shared", "packages/taco", "packages/taco-auth"],
-  "entryPointStrategy": "packages",
-  "name": "@nucypher/taco-web"
-}

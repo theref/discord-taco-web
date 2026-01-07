@@ -1,102 +1,33 @@
 {
-  "name": "monorepo",
+  "name": "taco-mdt-aa-signing-demo",
+  "version": "0.1.0",
+  "description": "TACo distributed signing with Account Abstraction and Discord integration",
   "private": true,
   "license": "GPL-3.0-only",
-  "author": "Piotr Roslaniec <p.roslaniec@gmail.com>",
+  "author": "NuCypher <dev@nucypher.com>",
   "scripts": {
-    "postinstall": "pnpm build",
-    "typedoc": "typedoc",
-    "typedoc:publish": "gh-pages -m \"[ci skip] Update typedoc docs\" -d docs --dotfiles --repo git@github.com:nucypher/taco-web.git",
-    "format": "prettier --check \"./**/*.ts\" README.md",
-    "format:fix": "prettier --write \"./**/*.ts\" README.md",
-    "lint": "pnpm run --parallel --aggregate-output --reporter append-only lint",
-    "lint:fix": "pnpm --parallel --aggregate-output --reporter append-only lint:fix",
-    "type-check": "pnpm --parallel --aggregate-output --reporter append-only type-check",
-    "build": "tsc --build --verbose ./tsconfig.prod.json",
-    "watch": "tsc --build --verbose --watch ./tsconfig.prod.json",
-    "test": "pnpm build && vitest run",
-    "package:check": "pnpm run --parallel --aggregate-output --reporter append-only --filter './packages/**' package-check",
-    "packages:lint": "pnpm packages:sort --check",
-    "packages:sort": "sort-package-json \"package.json\" \"examples/*/package.json\" \"packages/*/package.json\"",
-    "exports:lint": "pnpm run --parallel --aggregate-output --reporter append-only --filter './packages/**' exports:lint",
-    "fix": "pnpm format:fix && pnpm lint:fix && pnpm packages:sort",
-    "ci:lint": "run-p lint type-check package:check packages:lint exports:lint",
-    "check-examples": "pnpm run --parallel --aggregate-output --reporter append-only --filter './examples/**' --filter './demos/**' check"
+    "start": "tsx src/index.ts",
+    "dev": "tsx src/index.ts --debug",
+    "bot:deploy": "node src/bot/deploy-commands.js",
+    "bot:dev": "node src/bot/index.js"
   },
   "dependencies": {
     "@astronautlabs/jsonpath": "^1.1.2",
-    "@changesets/cli": "^2.28.1",
-    "@discordjs/util": "^1.1.1",
-    "@discordjs/ws": "^1.2.3",
-    "@nucypher/nucypher-contracts": "0.26.0-alpha.1",
-    "@nucypher/nucypher-core": "^0.14.5",
-    "deep-equal": "^2.2.3",
-    "discord.js": "^14.24.1",
+    "@discordjs/rest": "^2.3.0",
+    "@metamask/delegation-toolkit": "^0.11.0",
+    "@metamask/delegation-utils": "^0.11.0",
+    "@nucypher/shared": "0.6.0-alpha.8",
+    "@nucypher/taco": "0.7.0-alpha.8",
+    "discord-api-types": "^0.37.83",
     "dotenv": "^16.6.1",
     "ethers": "^5.8.0",
-    "express": "^5.1.0",
-    "siwe": "^2.3.2",
-    "tweetnacl": "^1.0.3"
+    "permissionless": "^0.2.54",
+    "tweetnacl": "^1.0.3",
+    "viem": "^2.34.0"
   },
   "devDependencies": {
-    "@skypack/package-check": "^0.2.2",
-    "@types/node": "^20.17.28",
-    "@typescript-eslint/eslint-plugin": "^6.21.0",
-    "@typescript-eslint/parser": "^6.21.0",
-    "@vitest/coverage-v8": "^3.2.4",
-    "bundlemon": "^2.1.0",
-    "eslint": "^8.57.1",
-    "eslint-config-prettier": "^9.1.0",
-    "eslint-config-typestrict": "^1.0.5",
-    "eslint-plugin-eslint-comments": "^3.2.0",
-    "eslint-plugin-import": "^2.31.0",
-    "eslint-plugin-no-only-tests": "^3.3.0",
-    "eslint-plugin-simple-import-sort": "^10.0.0",
-    "eslint-plugin-unused-imports": "^4.1.4",
-    "gh-pages": "^6.3.0",
-    "npm-run-all": "^4.1.5",
-    "prettier": "^3.5.3",
-    "prettier-plugin-organize-imports": "^3.2.4",
-    "sort-package-json": "^2.15.1",
-    "ts-node": "^10.9.2",
-    "ts-unused-exports": "^10.1.0",
-    "typedoc": "^0.25.13",
-    "typedoc-plugin-coverage": "^2.2.0",
-    "typedoc-plugin-missing-exports": "^2.3.0",
-    "typedoc-plugin-zod": "^1.4.0",
-    "typescript": "^5.8.2",
-    "vitest": "^3.0.9"
-  },
-  "pnpm": {
-    "peerDependencyRules": {
-      "ignoreMissing": [
-        "typescript",
-        "@types/node"
-      ]
-    },
-    "overrides": {
-      "@nucypher/taco": "workspace:^0.7.0-alpha.3",
-      "@nucypher/shared": "workspace:^0.6.0-alpha.2",
-      "@nucypher/nucypher-core": "^0.14.5",
-      "glob-parent@<5.1.2": ">=5.1.2",
-      "node-forge@<1.0.0": ">=1.0.0",
-      "node-forge@<1.3.0": ">=1.3.0",
-      "nth-check@<2.0.1": ">=2.0.1"
-    }
-  },
-  "bundlemon": {
-    "baseDir": ".",
-    "files": [
-      {
-        "path": "**/shared/build/**/*.*"
-      },
-      {
-        "path": "**/taco/build/**/*.*"
-      },
-      {
-        "path": "**/pre/build/**/*.*"
-      }
-    ]
-  },
-  "packageManager": "pnpm@10.12.4+sha512.5ea8b0deed94ed68691c9bad4c955492705c5eeb8a87ef86bc62c74a26b037b08ff9570f108b2e4dbd1dd1a9186fea925e527f141c648e85af45631074680184"
+    "@types/node": "^20.17.9",
+    "tsx": "^4.20.4",
+    "typescript": "^5.7.2"
+  }
 }
