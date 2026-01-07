@@ -163,15 +163,10 @@ async function signUserOpWithTaco(
   console.log("[TACo] Signing context fetched successfully");
 
   // Add our context parameters for condition evaluation
-  // TODO: Remove :amountValue/:recipientValue placeholders once SDK 0.7.0-alpha.8 is published
-  // (PR #750 fixes sequential varName scoping)
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
   (signingContext as any).customContextParameters = {
     ":timestamp": discordContext.timestamp,
     ":signature": discordContext.signature,
     ":discordPayload": discordContext.payload,
-    ":amountValue": "0",
-    ":recipientValue": "0x0",
   };
 
   console.log("[TACo] Context parameters:");
