@@ -426,22 +426,33 @@ async function main() {
     const { receipt } = await bundlerClient.waitForUserOperationReceipt({
       hash: userOpHash,
     });
-    console.log(`\nTransaction successful!`);
-    console.log(`Tx: ${receipt.transactionHash}`);
-    console.log(
-      `Explorer: https://sepolia.basescan.org/tx/${receipt.transactionHash}\n`,
-    );
 
-    await logBalances(
-      signingChainProvider,
-      localAccount.address,
-      smartAccount.address,
-    );
+    // Transaction succeeded - output success info for Discord bot
+    const txHash = receipt.transactionHash;
+    const explorerUrl = `https://sepolia.basescan.org/tx/${txHash}`;
+    console.log(`\nTransaction successful!`);
+    console.log(`Tx: ${txHash}`);
+    console.log(`Explorer: ${explorerUrl}\n`);
+
+    // Try to log balances but don't fail if RPC has issues
+    try {
+      await logBalances(
+        signingChainProvider,
+        localAccount.address,
+        smartAccount.address,
+      );
+    } catch (balanceErr) {
+      console.log("(Could not fetch final balances - RPC error)");
+    }
+
     console.log("Demo completed successfully!");
+    // Output structured success for Discord bot parsing
+    console.log(`SUCCESS:${txHash}:${explorerUrl}`);
     process.exit(0);
   } catch (error: unknown) {
     const errorMessage = error instanceof Error ? error.message : String(error);
     console.error(`Demo failed: ${errorMessage}`);
+    console.log("FAILED:" + errorMessage);
     process.exit(1);
   }
 }
