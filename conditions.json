@@ -5,88 +5,29 @@
     "operator": "and",
     "operands": [
       {
-        "message": ":timestamp:discordPayload",
-        "signature": ":signature",
-        "verifyingKey": "845e32f597ba70fba3586cbd0acbed78b40e01df4b940d01f7a74ee1fd7a43b8",
-        "curve": "Ed25519",
-        "conditionType": "ecdsa"
-      },
-      {
-        "conditionType": "sequential",
-        "conditionVariables": [
+        "conditionType": "compound",
+        "operator": "or",
+        "operands": [
           {
-            "varName": "senderSalt",
-            "condition": {
-              "conditionType": "json",
-              "data": ":discordPayload",
-              "query": "$.member.user.id",
-              "returnValueTest": {
-                "comparator": ">",
-                "value": 0
-              }
-            },
-            "operations": [
-              {
-                "operation": "+=",
-                "value": "|Discord|Collabland"
-              },
-              {
-                "operation": "keccak"
-              }
-            ]
+            "message": ":timestamp:discordPayload",
+            "signature": ":signature",
+            "verifyingKey": "db55ffb861ef97174c5da1563491ae39444851930aca9111039d875ca7812c23",
+            "curve": "Ed25519",
+            "conditionType": "ecdsa"
           },
           {
-            "varName": "senderAA",
-            "condition": {
-              "conditionType": "contract",
-              "contractAddress": "0x69Aa2f9fe1572F1B640E1bbc512f5c3a734fc77c",
-              "chain": 84532,
-              "method": "computeAddress",
-              "functionAbi": {
-                "name": "computeAddress",
-                "type": "function",
-                "inputs": [
-                  {
-                    "name": "_bytecodeHash",
-                    "type": "bytes32",
-                    "internalType": "bytes32"
-                  },
-                  {
-                    "name": "_salt",
-                    "type": "bytes32",
-                    "internalType": "bytes32"
-                  }
-                ],
-                "outputs": [
-                  {
-                    "name": "",
-                    "type": "address",
-                    "internalType": "address"
-                  }
-                ],
-                "stateMutability": "view"
-              },
-              "parameters": [
-                "0x210ffc0da7f274285c4d6116aaef8420ecb9054faced33862197d6b951cb32f5",
-                ":senderSalt"
-              ],
-              "returnValueTest": {
-                "comparator": "!=",
-                "value": "0x0000000000000000000000000000000000000000"
-              }
-            }
+            "message": ":timestamp:discordPayload",
+            "signature": ":signature",
+            "verifyingKey": "845e32f597ba70fba3586cbd0acbed78b40e01df4b940d01f7a74ee1fd7a43b8",
+            "curve": "Ed25519",
+            "conditionType": "ecdsa"
           },
           {
-            "varName": "validateSender",
-            "condition": {
-              "signingObjectContextVar": ":signingConditionObject",
-              "attributeName": "sender",
-              "conditionType": "signing-attribute",
-              "returnValueTest": {
-                "comparator": "==",
-                "value": ":senderAA"
-              }
-            }
+            "message": ":timestamp:discordPayload",
+            "signature": ":signature",
+            "verifyingKey": "d13fe84b134026fc0b26667ea3880779ad1b5dec2170561136929b479ed68800",
+            "curve": "Ed25519",
+            "conditionType": "ecdsa"
           }
         ]
       },
@@ -98,7 +39,7 @@
             "condition": {
               "conditionType": "json",
               "data": ":discordPayload",
-              "query": "$.data.options[?(@.name == \"amount\")].value",
+              "query": "$.data.options[0].options[?(@.name == \"amount\")].value",
               "returnValueTest": {
                 "comparator": ">",
                 "value": 0,
@@ -116,68 +57,6 @@
             ]
           },
           {
-            "varName": "recipientSalt",
-            "condition": {
-              "conditionType": "json",
-              "data": ":discordPayload",
-              "query": "$.data.options[?(@.name == \"recipient\")].value",
-              "returnValueTest": {
-                "comparator": ">",
-                "value": 0
-              }
-            },
-            "operations": [
-              {
-                "operation": "+=",
-                "value": "|Discord|Collabland"
-              },
-              {
-                "operation": "keccak"
-              }
-            ]
-          },
-          {
-            "varName": "recipientAA",
-            "condition": {
-              "conditionType": "contract",
-              "contractAddress": "0x69Aa2f9fe1572F1B640E1bbc512f5c3a734fc77c",
-              "chain": 84532,
-              "method": "computeAddress",
-              "functionAbi": {
-                "name": "computeAddress",
-                "type": "function",
-                "inputs": [
-                  {
-                    "name": "_bytecodeHash",
-                    "type": "bytes32",
-                    "internalType": "bytes32"
-                  },
-                  {
-                    "name": "_salt",
-                    "type": "bytes32",
-                    "internalType": "bytes32"
-                  }
-                ],
-                "outputs": [
-                  {
-                    "name": "",
-                    "type": "address",
-                    "internalType": "address"
-                  }
-                ],
-                "stateMutability": "view"
-              },
-              "parameters": [
-                "0x210ffc0da7f274285c4d6116aaef8420ecb9054faced33862197d6b951cb32f5",
-                ":recipientSalt"
-              ],
-              "returnValueTest": {
-                "comparator": "!=",
-                "value": "0x0000000000000000000000000000000000000000"
-              }
-            }
-          },
-          {
             "varName": "validateCalldata",
             "condition": {
               "signingObjectContextVar": ":signingConditionObject",
@@ -186,14 +65,6 @@
               "abiValidation": {
                 "allowedAbiCalls": {
                   "execute((address,uint256,bytes))": [
-                    {
-                      "parameterIndex": 0,
-                      "indexWithinTuple": 0,
-                      "returnValueTest": {
-                        "comparator": "==",
-                        "value": ":recipientAA"
-                      }
-                    },
                     {
                       "parameterIndex": 0,
                       "indexWithinTuple": 1,
