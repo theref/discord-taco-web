@@ -322,7 +322,11 @@ async function main() {
       throw new Error("Missing member.user.id in Discord payload");
     }
 
-    const opts = parsed?.data?.options || [];
+    // Navigate to the execute subcommand options (nested structure)
+    const executeCmd = parsed?.data?.options?.find(
+      (o: { name: string }) => o?.name === "execute",
+    );
+    const opts = executeCmd?.options || [];
     const amountOpt = opts.find(
       (o: { name: string }) => o?.name === "amount",
     )?.value;
