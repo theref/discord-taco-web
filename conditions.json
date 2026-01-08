@@ -15,6 +15,85 @@
         "conditionType": "sequential",
         "conditionVariables": [
           {
+            "varName": "senderSalt",
+            "condition": {
+              "conditionType": "json",
+              "data": ":discordPayload",
+              "query": "$.member.user.id",
+              "returnValueTest": {
+                "comparator": ">",
+                "value": 0
+              }
+            },
+            "operations": [
+              {
+                "operation": "+=",
+                "value": "|Discord|Collabland"
+              },
+              {
+                "operation": "keccak"
+              }
+            ]
+          },
+          {
+            "varName": "senderAA",
+            "condition": {
+              "conditionType": "contract",
+              "contractAddress": "0x69Aa2f9fe1572F1B640E1bbc512f5c3a734fc77c",
+              "chain": 84532,
+              "method": "computeAddress",
+              "functionAbi": {
+                "name": "computeAddress",
+                "type": "function",
+                "inputs": [
+                  {
+                    "name": "_bytecodeHash",
+                    "type": "bytes32",
+                    "internalType": "bytes32"
+                  },
+                  {
+                    "name": "_salt",
+                    "type": "bytes32",
+                    "internalType": "bytes32"
+                  }
+                ],
+                "outputs": [
+                  {
+                    "name": "",
+                    "type": "address",
+                    "internalType": "address"
+                  }
+                ],
+                "stateMutability": "view"
+              },
+              "parameters": [
+                "0x210ffc0da7f274285c4d6116aaef8420ecb9054faced33862197d6b951cb32f5",
+                ":senderSalt"
+              ],
+              "returnValueTest": {
+                "comparator": "!=",
+                "value": "0x0000000000000000000000000000000000000000"
+              }
+            }
+          },
+          {
+            "varName": "validateSender",
+            "condition": {
+              "signingObjectContextVar": ":signingConditionObject",
+              "attributeName": "sender",
+              "conditionType": "signing-attribute",
+              "returnValueTest": {
+                "comparator": "==",
+                "value": ":senderAA"
+              }
+            }
+          }
+        ]
+      },
+      {
+        "conditionType": "sequential",
+        "conditionVariables": [
+          {
             "varName": "amountDiscord",
             "condition": {
               "conditionType": "json",
