@@ -175,6 +175,7 @@ async function signUserOpWithTaco(
   console.log("  :discordPayload =", discordContext.payload);
 
   console.log("[TACo] Calling signUserOp...");
+  const startTime = Date.now();
   try {
     const result = await signUserOp(
       provider,
@@ -185,9 +186,13 @@ async function signUserOpWithTaco(
       AA_VERSION,
       signingContext,
     );
-    console.log("[TACo] signUserOp succeeded");
-    return result;
+    const signingTimeMs = Date.now() - startTime;
+    console.log(`[TACo] signUserOp succeeded in ${signingTimeMs}ms`);
+    console.log(`TACO_SIGNING_TIME_MS:${signingTimeMs}`);
+    return { ...result, signingTimeMs };
   } catch (err) {
+    const signingTimeMs = Date.now() - startTime;
+    console.log(`TACO_SIGNING_TIME_MS:${signingTimeMs}`);
     console.error("[TACo] ERROR in signUserOp:", err);
     throw err;
   }

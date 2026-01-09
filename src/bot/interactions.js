@@ -185,20 +185,27 @@ function createServer() {
       // Start demo and send follow-up when complete
       const child = startDemo(envOverrides, async ({ code, stdout }) => {
         let message;
+        // Extract TACo signing time from output
+        const signingTimeMatch = stdout.match(/TACO_SIGNING_TIME_MS:(\d+)/);
+        const signingTimeMs = signingTimeMatch ? signingTimeMatch[1] : null;
+        const signingTimeStr = signingTimeMs
+          ? ` (TACo signing: ${(signingTimeMs / 1000).toFixed(2)}s)`
+          : "";
+
         if (code === 0) {
           // Extract tx hash from output
           const txMatch = stdout.match(/Tx: (0x[a-fA-F0-9]+)/);
           const txHash = txMatch ? txMatch[1] : null;
           if (txHash) {
-            message = `Tip sent! [View on BaseScan](https://sepolia.basescan.org/tx/${txHash})`;
+            message = `Tip sent!${signingTimeStr} [View on BaseScan](https://sepolia.basescan.org/tx/${txHash})`;
           } else {
-            message = "Tip sent successfully!";
+            message = `Tip sent successfully!${signingTimeStr}`;
           }
         } else {
           // Extract error from output
           const errorMatch = stdout.match(/Demo failed: (.+)/);
           const error = errorMatch ? errorMatch[1] : "Unknown error";
-          message = `Tip failed: ${error}`;
+          message = `Tip failed: ${error}${signingTimeStr}`;
         }
 
         if (applicationId && interactionToken) {
