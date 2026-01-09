@@ -82,7 +82,7 @@ The key innovation: **the bot cannot cheat**. All authorization (who can send, h
 Every Discord user gets a unique, deterministic blockchain address:
 
 ```
-salt = keccak256("{discordUserId}|Discord|Collabland")
+salt = keccak256("{discordUserId}|Discord|Collab.Land")
 address = SimpleFactory.computeAddress(bytecodeHash, salt)
 ```
 
