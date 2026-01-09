@@ -109,10 +109,10 @@ async function createTacoSmartAccount(
 
 /**
  * Derives deterministic AA address for a Discord user.
- * Uses: keccak256("{DISCORD_USER_ID}|Discord|Collabland")
+ * Uses: keccak256("{DISCORD_USER_ID}|Discord|Collab.Land")
  *
  * The Discord ID comes first to match TaCo's += operation order
- * (variable + value = discordId + "|Discord|Collabland")
+ * (variable + value = discordId + "|Discord|Collab.Land")
  */
 async function deriveDiscordUserAA(
   publicClient: PublicClient,
@@ -121,7 +121,7 @@ async function deriveDiscordUserAA(
   discordUserId: string,
 ): Promise<Address> {
   const collablandId = ethers.utils.keccak256(
-    ethers.utils.toUtf8Bytes(`${discordUserId}|Discord|Collabland`),
+    ethers.utils.toUtf8Bytes(`${discordUserId}|Discord|Collab.Land`),
   ) as `0x${string}`;
 
   const { smartAccount } = await createTacoSmartAccount(
