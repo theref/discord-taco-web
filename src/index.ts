@@ -260,13 +260,26 @@ async function main() {
       chain,
     });
 
-    // Create smart account
+    // Parse Discord payload to get sender ID first (needed for AA derivation)
+    const parsed = JSON.parse(discordPayload);
+    const senderDiscordId = String(parsed?.member?.user?.id || "");
+    if (!senderDiscordId) {
+      throw new Error("Missing member.user.id in Discord payload");
+    }
+
+    // Derive sender's salt for AA address using same formula as TACo conditions
+    const senderSalt = ethers.utils.keccak256(
+      ethers.utils.toUtf8Bytes(`${senderDiscordId}|Discord|Collab.Land`),
+    ) as `0x${string}`;
+
+    // Create smart account with sender's derived salt
     console.log("Creating TACo smart account...\n");
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     const { smartAccount, threshold } = await createTacoSmartAccount(
       publicClient as any,
       signingCoordinatorProvider,
       signingChainProvider,
+      senderSalt,
     );
     console.log(`Smart account: ${smartAccount.address}`);
     console.log(`Threshold: ${threshold} signatures required\n`);
@@ -318,15 +331,6 @@ async function main() {
       );
     }
 
-    // Parse tip parameters from Discord payload
-    const parsed = JSON.parse(discordPayload);
-
-    // Get sender's Discord ID from payload
-    const senderDiscordId = String(parsed?.member?.user?.id || "");
-    if (!senderDiscordId) {
-      throw new Error("Missing member.user.id in Discord payload");
-    }
-
     // Navigate to the execute subcommand options (nested structure)
     const executeCmd = parsed?.data?.options?.find(
       (o: { name: string }) => o?.name === "execute",
@@ -343,18 +347,7 @@ async function main() {
       String(amountOpt ?? process.env.TIP_AMOUNT_ETH ?? "0.0001"),
     );
 
-    // Derive sender AA address (the person running the command)
-    console.log(`Deriving sender AA for Discord user ${senderDiscordId}...`);
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    const senderAA = await deriveDiscordUserAA(
-      publicClient as any,
-      signingCoordinatorProvider,
-      signingChainProvider,
-      senderDiscordId,
-    );
-    console.log(`Sender AA: ${senderAA}`);
-
-    // Derive recipient AA address
+    // Derive recipient AA address (sender AA is already smartAccount.address)
     console.log(`Deriving recipient AA for Discord user ${recipientUserId}...`);
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     const recipientAA = await deriveDiscordUserAA(
