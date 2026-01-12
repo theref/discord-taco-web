@@ -1,0 +1,298 @@
+## Tip Tournament (SmartTag 2.0 Trial) 
+
+The Tip Tournament is a low-risk first trial of SmartTag 2.0's UX, core functionality, business logic, and value propositions (both current and proposed). 
+The tournament will last for 5 days, commencing on January 19th at 11am EST.
+
+- **Players** sign up by reacting to an announcement and are identified by their Discord username
+- **Wallets** are funded by a pre-tournament airdrop (recorded on-chain)
+- **Participation** is composed of intra-player tip transactions that are tracked on-chain 
+- **Player Rankings** are computed by the bot, queryable during the tournament and published as a merkle root at the end 
+- **Prizes** are held in a TACo-controlled AA wallet and distributed automatically at the end of the tournament via a batch claim
+
+### Incentives & Game Dynamics 
+
+- The objective for all participating players is to record the largest number of tip transactions, using the funds (~$10 worth of ETH) bestowed to their smart accounts before the tournament begins. 
+- Players can tip other participating player within the Collab.Land Discord server. This avoids the rational move of tipping non-players, to avoid funding your competition. 
+- Players will naturally send the smallest possible amounts to each other, to maximize the number of transactions. 
+- Sending external funding to your wallet is allowed, but in most scenarios is irrational given the fixed ceiling on the prize value and risk of being 'outbid'. 
+- Each players smart account funds will decrease with each tx, by the (1) amount that they choose to tip and (2) the gas cost. Gas is (not/partially) subsidized by the AA paymaster. 
+- If txs were fully subsidized, then the rational method to maximize the number of transactions would be to 'infinite mirror' self-deal (send the funds back and forth between two smart accounts owned by one person), or to collude with another player or players to pass funds around. This dynamic would not test the UX or value propositions of SmartTag, and drain the paymaster subsidy. 
+- Some 'collusion' or deal-making between players is fine, and a natural outcome of incentivizing players to maximize transactions. 
+- Hopefully some 'novel' strategies will emerge, such as players convincing other players to tip them based on promises of splitting prize money.  
+
+### Player Wallet Funding & Prize Distribution
+
+Total budget: $1,000 (~0.00324 ETH)
+Pre-funded account budgets: 50 wallets funded with $10 of ETH each = $500 
+Prizes total: $500
+1st place:  250 USDC (50%)
+2nd place:  150 USDC (30%)
+3rd place:  100 USDC (20%)
+
+## Edge Cases
+
+- If players in winning positions 1, 2 or 3 have the same number of txs:
+   - All included as winners
+   - Split prize between them
+
+## Architecture
+
+```
+┌──────────────────────────────────────────────────────────────────────┐
+│                      TOURNAMENT SETUP FLOW                           │
+├──────────────────────────────────────────────────────────────────────┤
+│                                                                      │
+│  Discord Admin                                                       │
+│       │                                                              │
+│       │ /tournament create "Tipping Launch" duration:5d prizes:3     │
+│       ▼                                                              │
+│  ┌─────────┐                         ┌─────────────────┐             │
+│  │   Bot   │ ─────────────────────▶  │  Derive Prize   │             │
+│  │         │                         │  Pool AA Addr   │             │
+│  └─────────┘                         └────────┬────────┘             │
+│                                               │                      │
+│                                               ▼                      │
+│                                      ┌──────────────────┐            │
+│                                      │ Prize Pool AA    │            │
+│                                      │ (TACo-controlled)│            │
+│                                      └──────────────────┘            │
+│                                               │                      │
+│                              Admin funds the pool                    │
+│                                               │                      │
+│                              Bot airdrops to participants            │
+│                              (records participant list on-chain)     │
+│                                               ▼                      │
+│                                      Tournament is ACTIVE            │
+└──────────────────────────────────────────────────────────────────────┘
+
+┌──────────────────────────────────────────────────────────────────────┐
+│                      DURING QUEST                                    │
+├──────────────────────────────────────────────────────────────────────┤
+│                                                                      │
+│  Users tip each other normally with /tip                             │
+│       │                                                              │
+│       │ All tips recorded on-chain                                   │
+│       ▼                                                              │
+│  ┌─────────────────────────────────────────────────────────────┐     │
+│  │                     On-Chain Record                         │     │
+│  │                                                             │     │
+│  │  Block 1000: UserA_AA → UserB_AA (0.000001 ETH)             │     │
+│  │  Block 1001: UserC_AA → UserA_AA (0.000002 ETH)             │     │
+│  │  Block 1002: UserA_AA → UserD_AA (0.000001 ETH)             │     │
+│  │  ...                                                        │     │
+│  └─────────────────────────────────────────────────────────────┘     │
+└──────────────────────────────────────────────────────────────────────┘
+
+┌──────────────────────────────────────────────────────────────────────┐
+│                      TOURNAMENT END + MERKLE PUBLISH                 │
+├──────────────────────────────────────────────────────────────────────┤
+│                                                                      │
+│  Tournament duration ends                                            │
+│       │                                                              │
+│       ▼                                                              │
+│  ┌─────────┐                                                         │
+│  │   Bot   │ 1. Query on-chain: all tips between participant AAs     │
+│  │         │ 2. Count tips sent per address                          │
+│  │         │ 3. Rank by count, assign prizes                         │
+│  │         │ 4. Build merkle tree of (address, rank, prize)          │
+│  │         │ 5. Publish merkle root on-chain                         │
+│  │         │ 6. Publish full ranking data (IPFS/public)              │
+│  └─────────┘                                                         │
+│       │                                                              │
+│       │  Anyone can verify:                                          │
+│       │  - Recompute rankings from on-chain tips                     │
+│       │  - Hash published data → should match on-chain root          │
+│       ▼                                                              │
+│                                                                      │
+│  Prizes distributed via batch claim                                  │
+└──────────────────────────────────────────────────────────────────────┘
+
+```
+---
+## Participant Tracking
+
+Participants are known because they receive an initial airdrop:
+
+```typescript
+// At quest start, bot airdrops to all participants
+const participants = [
+  { discordId: "123456789", aa: "0xabc..." },
+  { discordId: "987654321", aa: "0xdef..." },
+  // ...
+];
+
+// Each airdrop is recorded on-chain
+// This creates the definitive participant list
+```
+
+When computing rankings, the bot only counts tips:
+- FROM a participant AA address
+- TO a participant AA address
+- Within the quest block range
+- Excluding self-tips (sender == recipient)
+
+---
+
+## Merkle Tree Structure
+
+After the quest ends, the bot builds a merkle tree:
+
+```typescript
+// Leaf data for each winner
+interface WinnerLeaf {
+  address: Address;    // User's AA address
+  rank: number;        // 1-10
+  prize: bigint;       // Prize amount in wei
+}
+
+// Build leaves
+const leaves = winners.map(w => 
+  keccak256(encodePacked(
+    ['address', 'uint256', 'uint256'],
+    [w.address, w.rank, w.prize]
+  ))
+);
+
+// Build merkle tree
+const tree = new MerkleTree(leaves, keccak256, { sortPairs: true });
+const root = tree.getRoot();
+
+// Publish root on-chain (single tx)
+await questContract.setMerkleRoot(questId, root);
+
+// Publish full data publicly for verification
+await ipfs.add(JSON.stringify({
+  questId,
+  rankings: winners,
+  root: root.toString('hex'),
+  blockRange: { start: startBlock, end: endBlock }
+}));
+```
+
+---
+
+## Deterministic Prize Pool Address
+
+Each quest has a prize pool AA derived from the quest ID:
+
+```typescript
+const questId = "tipping-launch-jan-2025";
+
+const prizePoolSalt = keccak256(
+  toUtf8Bytes(`QUEST:${botAppId}:${questId}:PRIZE_POOL`)
+);
+
+const prizePoolAddress = CREATE2(factory, prizePoolSalt, bytecode);
+```
+
+The prize pool is a TACo-controlled AA wallet.
+
+---
+
+## User Experience
+
+### `/quest create` (Admin Only)
+
+```
+/quest create 
+    name:"Tipping Launch Competition"
+    duration:14d
+    winners:10
+    prize_total:1000
+    token:USDC
+```
+
+The bot:
+1. Validates Discord signature + admin role
+2. Generates quest ID
+3. Derives prize pool AA address
+4. Records quest metadata
+5. Returns quest ID and prize pool address for funding
+
+### `/quest fund`
+
+```
+/quest fund quest:<id> amount:1000
+```
+
+Admin funds the prize pool via TACo-signed transfer.
+
+### `/quest airdrop`
+
+```
+/quest airdrop quest:<id> users:@user1,@user2,... amount:0.01
+```
+
+Admin triggers airdrop to participants:
+1. Derives AA address for each Discord user
+2. TACo signs transfers from prize pool to each participant
+3. Records participant list on-chain
+
+### `/quest leaderboard`
+
+```
+/quest leaderboard quest:<id>
+```
+
+Shows current standings (informational, computed from on-chain data).
+
+### `/quest finalize` (After Quest Ends)
+
+```
+/quest finalize quest:<id>
+```
+
+Anyone can trigger this after end date:
+1. Bot queries all tips between participants in block range
+2. Counts by sender, ranks
+3. Builds merkle tree
+4. Publishes root on-chain
+5. Publishes full ranking data to IPFS
+
+## Security & Trust Model
+
+### What TACo Guarantees
+
+| Property | How TACo Enforces |
+|----------|-------------------|
+| Only merkle-proven winners can claim | Verifies proof against on-chain root |
+| Correct prize amounts | Amount is in merkle leaf, verified in UserOp |
+| No double claims | Checks for previous transfers from pool |
+| Funds go to claimer | Recipient address verified in UserOp |
+
+### What TACo Does NOT Guarantee
+
+| Property | Why Not | Mitigation |
+|----------|---------|------------|
+| Rankings are correct | Bot computes rankings | Public verifiability |
+| Merkle root is honest | Bot publishes root | Anyone can recompute and verify |
+
+### Trust Model
+
+The bot is trusted to compute rankings correctly, but:
+- **Cannot steal funds** - TACo controls the prize pool
+- **Cannot pay non-winners** - merkle proof required
+- **Cannot overpay** - prize amounts are in the merkle tree
+- **Is publicly auditable** - anyone can verify rankings from on-chain data
+
+If the bot publishes an incorrect merkle root, anyone can detect this by recomputing from on-chain transactions. This provides social/reputational accountability rather than cryptographic enforcement of rankings.
+
+### Public Verifiability
+
+Anyone can verify the bot was honest:
+
+1. Query on-chain tips between participant AAs in block range
+2. Count by sender, sort by count
+3. Build merkle tree from rankings
+4. Compare computed root to published root
+5. If mismatch → bot cheated (public scandal)
+
+The bot cannot secretly cheat. It can only openly cheat, which destroys reputation.
+
+## Sybil Resistance
+
+Handled in the Discord bot:
+
+- **Discord account age > 30 days** - checked before airdrop
+- **Self-tips excluded** - not counted in rankings
+- **Only airdropped participants count** - can't join mid-quest
