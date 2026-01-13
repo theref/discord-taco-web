@@ -1,6 +1,6 @@
 ## Tip Tournament (SmartTag 2.0 Trial) 
 
-The Tip Tournament is a low-risk first trial of SmartTag 2.0's UX, core functionality, business logic, and value propositions (both current and proposed). 
+The Tip Tournament is a low-risk first trial of SmartTag 2.0's UX, core functionality, load/traffic management, business logic, and value propositions (both current and proposed). 
 The tournament will last for 5 days, commencing on January 19th at 11am EST.
 
 - **Players** sign up by reacting to an announcement and are identified by their Discord username
@@ -11,14 +11,25 @@ The tournament will last for 5 days, commencing on January 19th at 11am EST.
 
 ### Incentives & Game Dynamics 
 
-- The objective for all participating players is to record the largest number of tip transactions, using the funds (~$10 worth of ETH) bestowed to their smart accounts before the tournament begins. 
-- Players can tip other participating player within the Collab.Land Discord server. This avoids the rational move of tipping non-players, to avoid funding your competition. 
-- Players will naturally send the smallest possible amounts to each other, to maximize the number of transactions. 
+Players can use the funds (~$10 worth of ETH) bestowed to their smart accounts as they see fit. 
+
+Prize criteria 1: Execute the largest number of tip transactions from your smart account. 
+
+Prize criteria 2 (alternative): Receive tips to your smart account from the largest number of unique Discord usernames/SAs. 
+
+Guardrails & Likely Dynamics:
+- The maximum number of tips a given smart account can send (without receiving tips back or self-funding), is a function of min tip size and gas costs. 
+   - For prize 2, the gas costs (versus subsidy %) are less relevant given the absence of incentive to self-deal. 
+- Players can tip anyone in the Collab.Land Discord server.
+   - For prize 1, tipping non-players avoids funding your competition, but is risks the tip not being returned due to non-interest. This objective encourages 'closed loop' exchanges through existing trustful relationships. 
+   - For prize 2, xpanding the breadth other Discord members with which to do tip exchanges increases your chance of winning.
+- Each players smart account funds will decrease with each tx, by the (1) amount that they choose to tip and (2) the gas cost. Gas costs are *not* subsidized by the AA paymaster. 
+   - If txs were fully subsidized, then the rational method to maximize the number of transactions would be to 'infinite mirror' self-deal (send the funds back and forth between two smart accounts owned by one person), or to collude with another player or players to pass funds around. This dynamic would not test the UX or value propositions of SmartTag, and drain the paymaster subsidy. 
 - Sending external funding to your wallet is allowed, but in most scenarios is irrational given the fixed ceiling on the prize value and risk of being 'outbid'. 
-- Each players smart account funds will decrease with each tx, by the (1) amount that they choose to tip and (2) the gas cost. Gas is (not/partially) subsidized by the AA paymaster. 
-- If txs were fully subsidized, then the rational method to maximize the number of transactions would be to 'infinite mirror' self-deal (send the funds back and forth between two smart accounts owned by one person), or to collude with another player or players to pass funds around. This dynamic would not test the UX or value propositions of SmartTag, and drain the paymaster subsidy. 
-- Some 'collusion' or deal-making between players is fine, and a natural outcome of incentivizing players to maximize transactions. 
-- Hopefully some 'novel' strategies will emerge, such as players convincing other players to tip them based on promises of splitting prize money.  
+- Players will naturally send the smallest possible amounts to each other, to maximize the number of transactions. Hence a minimum tip size should be enforced. 
+- Discord account must be > 7 days old, to minimize sybil tactics. 
+- Deal-making between players is permissable, and a natural outcome of incentivizing players to maximize the number of transactions they can afford to make. 
+   - 'Novel' strategies will emerge, such as players convincing other players to tip them based on promises of splitting prize money.  
 
 ### Player Wallet Funding & Prize Distribution
 
@@ -66,7 +77,7 @@ Prizes total: $500
 └──────────────────────────────────────────────────────────────────────┘
 
 ┌──────────────────────────────────────────────────────────────────────┐
-│                      DURING QUEST                                    │
+│                      DURING TOURNAMENT                               │
 ├──────────────────────────────────────────────────────────────────────┤
 │                                                                      │
 │  Users tip each other normally with /tip                             │
@@ -109,13 +120,13 @@ Prizes total: $500
 
 ```
 ---
-## Participant Tracking
+## Player Tracking
 
-Participants are known because they receive an initial airdrop:
+Once the tournament starts, players are identifiable because they received an initial airdrop:
 
 ```typescript
-// At quest start, bot airdrops to all participants
-const participants = [
+// At tournament start, bot airdrops to all players who 
+const players = [
   { discordId: "123456789", aa: "0xabc..." },
   { discordId: "987654321", aa: "0xdef..." },
   // ...
@@ -126,22 +137,22 @@ const participants = [
 ```
 
 When computing rankings, the bot only counts tips:
-- FROM a participant AA address
-- TO a participant AA address
-- Within the quest block range
+- FROM a player AA address
+- TO a player AA address
+- Within the tournament block range
 - Excluding self-tips (sender == recipient)
 
 ---
 
 ## Merkle Tree Structure
 
-After the quest ends, the bot builds a merkle tree:
+After the tournament ends, the bot builds a merkle tree:
 
 ```typescript
 // Leaf data for each winner
 interface WinnerLeaf {
   address: Address;    // User's AA address
-  rank: number;        // 1-10
+  rank: number;        // 1-3
   prize: bigint;       // Prize amount in wei
 }
 
@@ -173,10 +184,10 @@ await ipfs.add(JSON.stringify({
 
 ## Deterministic Prize Pool Address
 
-Each quest has a prize pool AA derived from the quest ID:
+Each quest has a prize pool AA derived from the tournament ID:
 
 ```typescript
-const questId = "tipping-launch-jan-2025";
+const tournamentId = "tipping-launch-jan-2025";
 
 const prizePoolSalt = keccak256(
   toUtf8Bytes(`QUEST:${botAppId}:${questId}:PRIZE_POOL`)
@@ -196,10 +207,10 @@ The prize pool is a TACo-controlled AA wallet.
 ```
 /quest create 
     name:"Tipping Launch Competition"
-    duration:14d
-    winners:10
-    prize_total:1000
-    token:USDC
+    duration:5d
+    winners:3
+    prize_total:500
+    token:ETH
 ```
 
 The bot:
@@ -230,6 +241,7 @@ Admin triggers airdrop to participants:
 
 ### `/quest leaderboard`
 
+Anyone can pull the latest leaderboard via this slash command: 
 ```
 /quest leaderboard quest:<id>
 ```
@@ -242,7 +254,7 @@ Shows current standings (informational, computed from on-chain data).
 /quest finalize quest:<id>
 ```
 
-Anyone can trigger this after end date:
+Anyone can trigger this after end date. For the Tip Tournament, TACO team will initiate merkle root publishing and prize distribution. 
 1. Bot queries all tips between participants in block range
 2. Counts by sender, ranks
 3. Builds merkle tree
@@ -255,9 +267,8 @@ Anyone can trigger this after end date:
 
 | Property | How TACo Enforces |
 |----------|-------------------|
-| Only merkle-proven winners can claim | Verifies proof against on-chain root |
+| Only merkle-proven winners will receive prizes | Verifies proof against on-chain root |
 | Correct prize amounts | Amount is in merkle leaf, verified in UserOp |
-| No double claims | Checks for previous transfers from pool |
 | Funds go to claimer | Recipient address verified in UserOp |
 
 ### What TACo Does NOT Guarantee
@@ -267,25 +278,19 @@ Anyone can trigger this after end date:
 | Rankings are correct | Bot computes rankings | Public verifiability |
 | Merkle root is honest | Bot publishes root | Anyone can recompute and verify |
 
-### Trust Model
-
 The bot is trusted to compute rankings correctly, but:
 - **Cannot steal funds** - TACo controls the prize pool
 - **Cannot pay non-winners** - merkle proof required
 - **Cannot overpay** - prize amounts are in the merkle tree
 - **Is publicly auditable** - anyone can verify rankings from on-chain data
 
-If the bot publishes an incorrect merkle root, anyone can detect this by recomputing from on-chain transactions. This provides social/reputational accountability rather than cryptographic enforcement of rankings.
-
-### Public Verifiability
-
-Anyone can verify the bot was honest:
+If the bot publishes an incorrect merkle root, anyone can detect this by recomputing from on-chain transactions. This provides social/reputational accountability rather than cryptographic enforcement of rankings. Anyone can verify the bot was honest:
 
 1. Query on-chain tips between participant AAs in block range
 2. Count by sender, sort by count
 3. Build merkle tree from rankings
 4. Compare computed root to published root
-5. If mismatch → bot cheated (public scandal)
+5. If mismatch → bot cheated → public scandal 
 
 The bot cannot secretly cheat. It can only openly cheat, which destroys reputation.
 
