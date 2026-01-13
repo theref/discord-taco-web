@@ -7,6 +7,46 @@ require("dotenv").config();
 
 let running = false;
 
+// Discord epoch: January 1, 2015 00:00:00 UTC (in milliseconds)
+const DISCORD_EPOCH = 1420070400000n;
+
+// Minimum account age in days (configurable via env)
+const MIN_ACCOUNT_AGE_DAYS = Number(process.env.MIN_ACCOUNT_AGE_DAYS || 7);
+
+/**
+ * Extract creation timestamp from Discord snowflake ID.
+ * Discord snowflakes encode timestamp in bits 22-63.
+ * Formula: (snowflake >> 22) + DISCORD_EPOCH = Unix timestamp (ms)
+ */
+function getDiscordAccountCreationTime(snowflakeId) {
+  const snowflake = BigInt(snowflakeId);
+  const timestamp = Number((snowflake >> 22n) + DISCORD_EPOCH);
+  return new Date(timestamp);
+}
+
+/**
+ * Calculate account age in days from Discord user ID.
+ */
+function getAccountAgeDays(snowflakeId) {
+  const createdAt = getDiscordAccountCreationTime(snowflakeId);
+  const now = new Date();
+  const ageMs = now.getTime() - createdAt.getTime();
+  return ageMs / (1000 * 60 * 60 * 24);
+}
+
+/**
+ * Check if Discord account meets minimum age requirement.
+ * Returns { valid: boolean, ageDays: number, minDays: number }
+ */
+function checkAccountAge(snowflakeId) {
+  const ageDays = getAccountAgeDays(snowflakeId);
+  return {
+    valid: ageDays >= MIN_ACCOUNT_AGE_DAYS,
+    ageDays: Math.floor(ageDays),
+    minDays: MIN_ACCOUNT_AGE_DAYS,
+  };
+}
+
 function sendFollowup(applicationId, interactionToken, content) {
   const url = `https://discord.com/api/v10/webhooks/${applicationId}/${interactionToken}`;
   const body = JSON.stringify({ content });
@@ -146,6 +186,30 @@ function createServer() {
       // Extract interaction details for follow-up
       const applicationId = parsed?.application_id;
       const interactionToken = parsed?.token;
+
+      // Extract sender Discord user ID for account age check
+      const senderUserId = parsed?.member?.user?.id;
+      if (senderUserId) {
+        const ageCheck = checkAccountAge(senderUserId);
+        if (!ageCheck.valid) {
+          console.log(
+            `   ✗ Account too new: ${ageCheck.ageDays} days (min: ${ageCheck.minDays})`,
+          );
+          // Respond with immediate error (type 4 = CHANNEL_MESSAGE_WITH_SOURCE)
+          res.writeHead(200, { "content-type": "application/json" });
+          res.end(
+            JSON.stringify({
+              type: 4,
+              data: {
+                content: `Your Discord account must be at least ${ageCheck.minDays} days old to send tips. Your account is ${ageCheck.ageDays} days old.`,
+                flags: 64, // Ephemeral - only visible to sender
+              },
+            }),
+          );
+          return;
+        }
+        console.log(`   ✓ Account age OK: ${ageCheck.ageDays} days`);
+      }
 
       // Extract tip parameters from Discord payload (nested execute subcommand)
       let amount = process.env.TIP_AMOUNT_ETH || "0.0001";
