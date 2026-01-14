@@ -493,6 +493,15 @@ async function main() {
       verificationGasLimit: BigInt(500_000),
     });
 
+    // Debug: Log the callData to see how viem encodes multi-call
+    console.log("\n=== DEBUG: UserOp callData ===");
+    console.log("callData:", userOp.callData);
+    console.log("callData length:", userOp.callData.length);
+    // Try to decode the function selector (first 10 characters: 0x + 8 hex chars)
+    const selector = userOp.callData.slice(0, 10);
+    console.log("Function selector:", selector);
+    console.log("==============================\n");
+
     // Sign with TACo
     // AA addresses are derived within TACo conditions from Discord user IDs
     console.log("Signing with TACo...");
