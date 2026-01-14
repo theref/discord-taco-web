@@ -3,15 +3,15 @@
 ## Overview
 
 A trust-minimized prediction market system where:
-- **Betting** happens on-chain via TACo-signed UserOps
-- **Resolution** is verified by TACo nodes querying external data sources
-- **Payouts** are enforced cryptographically by TACo conditions
+- **Betting** happens on-chain via TaCo-signed UserOps calling a market contract
+- **Resolution** is verified by TaCo nodes querying external data sources
+- **Payouts** are calculated and distributed by the smart contract
 
 The Discord bot is **untrusted**. All security comes from:
-1. Discord signature verification (proves user intent to bet)
-2. On-chain bet records (immutable proof of bets)
-3. TACo oracle consensus (M-of-N nodes verify resolution)
-4. Cryptographic binding of payouts to bet amounts and outcomes
+1. Discord signature verification (proves user intent)
+2. Smart contract bet tracking (immutable, on-chain state)
+3. TaCo oracle consensus (M-of-N nodes verify resolution)
+4. Contract-enforced payouts (no off-chain calculation)
 
 ---
 
@@ -27,26 +27,27 @@ The Discord bot is **untrusted**. All security comes from:
 │       │ /predict bet <market_id> <outcome> <amount>                  │
 │       ▼                                                              │
 │  ┌─────────┐    Discord Signature    ┌─────────────────┐            │
-│  │   Bot   │ ─────────────────────▶  │      TACo       │            │
+│  │   Bot   │ ─────────────────────▶  │      TaCo       │            │
 │  │(untrust)│    + bet params         │  Cohort (M/N)   │            │
 │  └─────────┘                         └────────┬────────┘            │
 │                                               │                      │
 │                              Conditions:      │                      │
 │                              ✓ Discord sig    │                      │
-│                              ✓ Market exists  │                      │
 │                              ✓ Market open    │                      │
 │                              ✓ Amount matches │                      │
+│                              ✓ Outcome valid  │                      │
 │                                               ▼                      │
 │                                      ┌────────────────┐              │
 │                                      │  Signed UserOp │              │
-│                                      │  (user AA →    │              │
-│                                      │   outcome pool)│              │
+│                                      │  user AA calls │              │
+│                                      │  contract.bet()│              │
 │                                      └───────┬────────┘              │
 │                                              │                       │
 │                                              ▼                       │
 │                                      ┌────────────────┐              │
-│                                      │    Bundler     │              │
-│                                      │  (on-chain tx) │              │
+│                                      │   Contract     │              │
+│                                      │ tracks bet in  │              │
+│                                      │   mappings     │              │
 │                                      └────────────────┘              │
 └─────────────────────────────────────────────────────────────────────┘
 
@@ -58,57 +59,172 @@ The Discord bot is **untrusted**. All security comes from:
 │       │                                                              │
 │       │ /predict claim <market_id>                                   │
 │       ▼                                                              │
-│  ┌─────────┐    Claim request        ┌─────────────────┐            │
-│  │   Bot   │ ─────────────────────▶  │      TACo       │            │
-│  │(untrust)│                         │  Cohort (M/N)   │            │
-│  └─────────┘                         └────────┬────────┘            │
+│  ┌─────────┐    Bot determines       ┌─────────────────┐            │
+│  │   Bot   │    resolution result    │      TaCo       │            │
+│  │(untrust)│ ─────────────────────▶  │  Cohort (M/N)   │            │
+│  └─────────┘    UserOp: claim(result)└────────┬────────┘            │
 │                                               │                      │
 │                              Conditions:      │                      │
+│                              ✓ Discord sig    │                      │
 │                              ✓ Market ended   │                      │
-│                              ✓ Resolution     │                      │
-│                                verified       │                      │
-│                              ✓ User bet on    │                      │
-│                                winning side   │                      │
-│                              ✓ Payout amount  │                      │
-│                                is correct     │                      │
-│                              ✓ Not already    │                      │
-│                                claimed        │                      │
+│                              ✓ TaCo verifies  │                      │
+│                                resolution     │                      │
+│                              ✓ result param   │                      │
+│                                matches        │                      │
 │                                               ▼                      │
 │                                      ┌────────────────┐              │
 │                                      │  Signed UserOp │              │
-│                                      │  (pool AA →    │              │
-│                                      │   user AA)     │              │
+│                                      │  user AA calls │              │
+│                                      │ contract.claim │              │
+│                                      │    (result)    │              │
 │                                      └───────┬────────┘              │
 │                                              │                       │
 │                                              ▼                       │
 │                                      ┌────────────────┐              │
-│                                      │    Bundler     │              │
-│                                      │  (on-chain tx) │              │
+│                                      │   Contract     │              │
+│                                      │ verifies winner│              │
+│                                      │ calculates &   │              │
+│                                      │ sends payout   │              │
 │                                      └────────────────┘              │
 └─────────────────────────────────────────────────────────────────────┘
 ```
 
+**Key insight:** TaCo's role is simplified to being an **oracle for the resolution result**. The contract handles all bet tracking, payout calculation, and distribution.
+
 ---
 
-## Deterministic Pool Addresses
+## Smart Contract Design
 
-Each market has two pool addresses derived deterministically:
+### Single Contract Per Market
 
-```typescript
-const marketId = "eth-5000-june-2025";
+Instead of separate YES/NO pool addresses, each market uses a single contract that:
+- Escrows all bets in one place
+- Tracks who bet what on which outcome
+- Calculates and distributes payouts
 
-const yesPoolSalt = keccak256(
-  toUtf8Bytes(`MARKET:${botAppId}:${marketId}:YES`)
-);
-const noPoolSalt = keccak256(
-  toUtf8Bytes(`MARKET:${botAppId}:${marketId}:NO`)
-);
+```solidity
+// SPDX-License-Identifier: MIT
+pragma solidity ^0.8.19;
 
-const yesPoolAddress = CREATE2(factory, yesPoolSalt, bytecode);
-const noPoolAddress = CREATE2(factory, noPoolSalt, bytecode);
+contract PredictionMarket {
+    address public immutable tacoSigner;  // TaCo cohort multisig
+    uint256 public immutable endTime;
+    
+    mapping(address => uint256) public yesBets;
+    mapping(address => uint256) public noBets;
+    mapping(address => bool) public claimed;
+    
+    uint256 public totalYes;
+    uint256 public totalNo;
+    bool public resolved;
+    bool public outcome;  // true = YES won, false = NO won
+    
+    event BetPlaced(address indexed bettor, bool outcome, uint256 amount);
+    event Claimed(address indexed bettor, uint256 payout);
+    event Resolved(bool outcome);
+    
+    constructor(address _tacoSigner, uint256 _endTime) {
+        tacoSigner = _tacoSigner;
+        endTime = _endTime;
+    }
+    
+    /// @notice Place a bet on YES (true) or NO (false)
+    /// @dev Called via TaCo-signed UserOp from user's AA wallet
+    function bet(bool _outcome) external payable {
+        require(block.timestamp < endTime, "Market closed");
+        require(msg.value > 0, "Must bet something");
+        
+        if (_outcome) {
+            yesBets[msg.sender] += msg.value;
+            totalYes += msg.value;
+        } else {
+            noBets[msg.sender] += msg.value;
+            totalNo += msg.value;
+        }
+        
+        emit BetPlaced(msg.sender, _outcome, msg.value);
+    }
+    
+    /// @notice Claim winnings after resolution
+    /// @param result The resolution result (verified by TaCo before signing)
+    /// @dev TaCo nodes independently verify result matches oracle data
+    function claim(bool result) external {
+        require(block.timestamp >= endTime, "Market not ended");
+        require(!claimed[msg.sender], "Already claimed");
+        
+        // First claim resolves the market
+        if (!resolved) {
+            resolved = true;
+            outcome = result;
+            emit Resolved(result);
+        } else {
+            // Subsequent claims must use same result
+            require(result == outcome, "Wrong result");
+        }
+        
+        // Check caller bet on winning side
+        uint256 userBet = result ? yesBets[msg.sender] : noBets[msg.sender];
+        require(userBet > 0, "No winning bet");
+        
+        // Calculate payout: original bet + share of losing pool
+        uint256 winningPool = result ? totalYes : totalNo;
+        uint256 losingPool = result ? totalNo : totalYes;
+        uint256 payout = userBet + (userBet * losingPool / winningPool);
+        
+        claimed[msg.sender] = true;
+        
+        (bool success, ) = msg.sender.call{value: payout}("");
+        require(success, "Transfer failed");
+        
+        emit Claimed(msg.sender, payout);
+    }
+    
+    /// @notice Refund if market is cancelled (admin function)
+    function refund() external {
+        require(!resolved, "Already resolved");
+        
+        uint256 userTotal = yesBets[msg.sender] + noBets[msg.sender];
+        require(userTotal > 0, "Nothing to refund");
+        
+        yesBets[msg.sender] = 0;
+        noBets[msg.sender] = 0;
+        
+        (bool success, ) = msg.sender.call{value: userTotal}("");
+        require(success, "Transfer failed");
+    }
+}
 ```
 
-Both pools are TACo-controlled AA wallets. The bot cannot withdraw from them - only TACo-signed UserOps can move funds.
+### Benefits of Single Contract
+
+1. **Funds escrowed in one place** - No split across multiple pool addresses
+2. **Contract tracks bets** - No need to reconstruct from event logs
+3. **Payout calculation on-chain** - No complex TaCo condition math
+4. **Double-claim prevention built-in** - Simple `claimed` mapping
+5. **Gas efficient** - Single contract deployment, simple mappings
+
+---
+
+## Deterministic Contract Addresses
+
+Markets are deployed via CREATE2 for deterministic addresses:
+
+```typescript
+const marketId = keccak256(
+  toUtf8Bytes(`${botAppId}:${questionHash}:${creatorId}:${timestamp}`)
+);
+
+const contractSalt = keccak256(
+  toUtf8Bytes(`MARKET:${botAppId}:${marketId}`)
+);
+
+const marketAddress = CREATE2(factory, contractSalt, marketBytecode);
+```
+
+This allows:
+- Computing market address before deployment
+- Verifying market authenticity from parameters
+- No registry needed - address is derivable
 
 ---
 
@@ -128,15 +244,16 @@ Both pools are TACo-controlled AA wallets. The bot cannot withdraw from them - o
 
 The bot:
 1. Validates Discord signature
-2. Generates deterministic market ID from question hash + creator + timestamp
-3. Derives YES and NO pool addresses
-4. Stores market metadata (question, end date, resolution config)
-5. Returns market ID and pool addresses
+2. Generates deterministic market ID
+3. Deploys market contract (or computes address if using factory)
+4. Stores market metadata (question, resolution config)
+5. Returns market address
 
-**Market metadata stored on-chain or IPFS:**
+**Market metadata:**
 ```json
 {
   "marketId": "0xabc123...",
+  "contractAddress": "0x...",
   "question": "Will ETH be above $5000 on June 1st 2025?",
   "creator": "discord:123456789",
   "createdAt": 1704067200,
@@ -148,8 +265,6 @@ The bot:
     "comparator": ">",
     "threshold": 5000
   },
-  "yesPool": "0x...",
-  "noPool": "0x...",
   "token": "ETH"
 }
 ```
@@ -162,28 +277,19 @@ The bot:
 
 The bot:
 1. Validates Discord signature
-2. Verifies market exists and is still open (end_date not passed)
-3. Derives user's AA address from Discord ID
-4. Builds UserOp: transfer `amount` from user AA → YES pool (or NO pool)
-5. Sends to TACo for signing
-6. Submits to bundler
-7. Returns transaction hash
+2. Looks up market contract address
+3. Builds UserOp: user AA calls `contract.bet{value: amount}(true)` for YES
+4. Sends to TaCo for signing
+5. Submits to bundler
+6. Returns transaction hash
 
-### `/predict resolve`
+### `/predict status`
 
 ```
-/predict resolve market:<id>
+/predict status market:<id>
 ```
 
-Anyone can call this after the end date. The bot:
-1. Fetches market metadata
-2. Verifies end_date has passed
-3. Queries resolution source (e.g., CoinGecko API for ETH price)
-4. Determines winning outcome (YES or NO)
-5. Stores resolution result (on-chain or IPFS)
-6. Returns result
-
-**Note:** This step is informational. The actual resolution verification happens in TACo conditions when users claim.
+Shows current betting totals, odds, and time remaining.
 
 ### `/predict claim`
 
@@ -193,19 +299,19 @@ Anyone can call this after the end date. The bot:
 
 The bot:
 1. Validates Discord signature
-2. Derives user's AA address
-3. Queries on-chain: user's bet amount to winning pool
-4. Queries on-chain: total bets on winning side, total bets on losing side
-5. Calculates payout: `userBet + (userBet / winningTotal) * losingTotal`
-6. Builds UserOp: transfer payout from winning pool → user AA
-7. Sends to TACo for signing (conditions verify everything)
-8. Submits to bundler
+2. Verifies market has ended
+3. Queries resolution source (e.g., CoinGecko API)
+4. Determines result (YES or NO)
+5. Builds UserOp: user AA calls `contract.claim(result)`
+6. Sends to TaCo for signing (TaCo independently verifies result)
+7. Submits to bundler
+8. Contract checks if user won and sends payout
 
 ---
 
 ## Payout Calculation
 
-Simple proportional payout from the losing pool to winners:
+The contract calculates payouts using proportional distribution:
 
 ```
 Total YES bets: 10 ETH
@@ -218,23 +324,18 @@ User A's winnings from NO pool: 5 * 0.2 = 1 ETH
 User A's total payout: 2 + 1 = 3 ETH
 ```
 
-Formula:
-```
-payout = userBet + (userBet / winningPoolTotal) * losingPoolTotal
-```
-
-Or equivalently:
-```
-payout = userBet * (winningPoolTotal + losingPoolTotal) / winningPoolTotal
+Formula (implemented in contract):
+```solidity
+payout = userBet + (userBet * losingPool / winningPool)
 ```
 
 ---
 
-## TACo Conditions
+## TaCo Conditions
 
 ### Betting Condition
 
-Authorizes TACo to sign bet transfers.
+Simple validation that the bet matches Discord intent:
 
 ```json
 {
@@ -254,18 +355,6 @@ Authorizes TACo to sign bet transfers.
         "conditionType": "sequential",
         "conditionVariables": [
           {
-            "varName": "marketId",
-            "condition": {
-              "conditionType": "json",
-              "data": ":discordPayload",
-              "query": "$.data.options[?(@.name == 'market')].value",
-              "returnValueTest": {
-                "comparator": "!=",
-                "value": ""
-              }
-            }
-          },
-          {
             "varName": "outcome",
             "condition": {
               "conditionType": "json",
@@ -276,6 +365,18 @@ Authorizes TACo to sign bet transfers.
                 "value": ["YES", "NO"]
               }
             }
+          },
+          {
+            "varName": "outcomeBool",
+            "condition": {
+              "conditionType": "json",
+              "data": ":discordPayload",
+              "query": "$.data.options[?(@.name == 'outcome')].value"
+            },
+            "operations": [
+              {"operation": "==", "value": "YES"}
+            ],
+            "_comment": "Convert YES/NO to true/false"
           },
           {
             "varName": "amount",
@@ -291,19 +392,19 @@ Authorizes TACo to sign bet transfers.
             "operations": [{"operation": "ethToWei"}]
           },
           {
-            "varName": "marketEndDate",
+            "varName": "marketAddress",
             "condition": {
-              "conditionType": "json-api",
-              "endpoint": ":marketMetadataEndpoint",
-              "query": "$.endDate",
+              "conditionType": "json",
+              "data": ":discordPayload",
+              "query": "$.data.options[?(@.name == 'market')].value",
               "returnValueTest": {
-                "comparator": ">",
-                "value": ":currentTimestamp"
+                "comparator": "!=",
+                "value": ""
               }
             }
           },
           {
-            "varName": "validTransfer",
+            "varName": "validateCalldata",
             "condition": {
               "conditionType": "signing-abi-attribute",
               "signingObjectContextVar": ":signingConditionObject",
@@ -316,8 +417,9 @@ Authorizes TACo to sign bet transfers.
                       "indexWithinTuple": 0,
                       "returnValueTest": {
                         "comparator": "==",
-                        "value": ":expectedPoolAddress"
-                      }
+                        "value": ":marketAddress"
+                      },
+                      "_comment": "Transfer goes to market contract"
                     },
                     {
                       "parameterIndex": 0,
@@ -325,6 +427,25 @@ Authorizes TACo to sign bet transfers.
                       "returnValueTest": {
                         "comparator": "==",
                         "value": ":amount"
+                      },
+                      "_comment": "Value matches Discord amount"
+                    },
+                    {
+                      "parameterIndex": 0,
+                      "indexWithinTuple": 2,
+                      "nestedAbiValidation": {
+                        "allowedAbiCalls": {
+                          "bet(bool)": [
+                            {
+                              "parameterIndex": 0,
+                              "returnValueTest": {
+                                "comparator": "==",
+                                "value": ":outcomeBool"
+                              },
+                              "_comment": "Outcome matches Discord choice"
+                            }
+                          ]
+                        }
                       }
                     }
                   ]
@@ -339,16 +460,9 @@ Authorizes TACo to sign bet transfers.
 }
 ```
 
-**Key points:**
-- Discord signature verification (proves user intent)
-- Extracts market ID, outcome, and amount from Discord payload
-- Verifies market is still open (end date not passed)
-- Verifies UserOp transfers to correct pool address (YES or NO based on outcome)
-- Verifies UserOp amount matches what user requested
-
 ### Claim Condition
 
-Authorizes TACo to sign payout transfers from pool to winner.
+TaCo verifies the resolution result, contract handles the rest:
 
 ```json
 {
@@ -368,85 +482,28 @@ Authorizes TACo to sign payout transfers from pool to winner.
         "conditionType": "sequential",
         "conditionVariables": [
           {
-            "varName": "marketId",
+            "varName": "marketAddress",
             "condition": {
               "conditionType": "json",
               "data": ":discordPayload",
-              "query": "$.data.options[?(@.name == 'market')].value",
-              "returnValueTest": {
-                "comparator": "!=",
-                "value": ""
-              }
-            }
-          },
-          {
-            "varName": "marketEnded",
-            "condition": {
-              "conditionType": "json-api",
-              "endpoint": ":marketMetadataEndpoint",
-              "query": "$.endDate",
-              "returnValueTest": {
-                "comparator": "<",
-                "value": ":currentTimestamp"
-              }
+              "query": "$.data.options[?(@.name == 'market')].value"
             }
           },
           {
             "varName": "resolutionResult",
             "condition": {
               "conditionType": "json-api",
-              "endpoint": "https://api.coingecko.com/api/v3/coins/:asset/history?date=:endDateFormatted",
+              "endpoint": "https://api.coingecko.com/api/v3/coins/:asset/history?date=:endDate",
               "query": "$.market_data.current_price.usd",
               "returnValueTest": {
                 "comparator": ":resolutionComparator",
                 "value": ":resolutionThreshold"
               }
-            }
+            },
+            "_comment": "TaCo independently queries resolution source"
           },
           {
-            "varName": "winningOutcome",
-            "condition": {
-              "conditionType": "computed",
-              "expression": "resolutionResult ? 'YES' : 'NO'"
-            }
-          },
-          {
-            "varName": "userBetAmount",
-            "condition": {
-              "conditionType": "json-rpc",
-              "endpoint": ":rpcEndpoint",
-              "method": "eth_getBalance",
-              "params": [":userAA", "latest"],
-              "comment": "TODO: Query user's transfer to winning pool"
-            }
-          },
-          {
-            "varName": "winningPoolTotal",
-            "condition": {
-              "conditionType": "json-rpc",
-              "endpoint": ":rpcEndpoint",
-              "method": "eth_getBalance",
-              "params": [":winningPoolAddress", "latest"]
-            }
-          },
-          {
-            "varName": "losingPoolTotal",
-            "condition": {
-              "conditionType": "json-rpc",
-              "endpoint": ":rpcEndpoint",
-              "method": "eth_getBalance",
-              "params": [":losingPoolAddress", "latest"]
-            }
-          },
-          {
-            "varName": "expectedPayout",
-            "condition": {
-              "conditionType": "computed",
-              "expression": "userBetAmount * (winningPoolTotal + losingPoolTotal) / winningPoolTotal"
-            }
-          },
-          {
-            "varName": "validPayout",
+            "varName": "validateCalldata",
             "condition": {
               "conditionType": "signing-abi-attribute",
               "signingObjectContextVar": ":signingConditionObject",
@@ -459,15 +516,25 @@ Authorizes TACo to sign payout transfers from pool to winner.
                       "indexWithinTuple": 0,
                       "returnValueTest": {
                         "comparator": "==",
-                        "value": ":claimerAA"
+                        "value": ":marketAddress"
                       }
                     },
                     {
                       "parameterIndex": 0,
-                      "indexWithinTuple": 1,
-                      "returnValueTest": {
-                        "comparator": "==",
-                        "value": ":expectedPayout"
+                      "indexWithinTuple": 2,
+                      "nestedAbiValidation": {
+                        "allowedAbiCalls": {
+                          "claim(bool)": [
+                            {
+                              "parameterIndex": 0,
+                              "returnValueTest": {
+                                "comparator": "==",
+                                "value": ":resolutionResult"
+                              },
+                              "_comment": "Result param matches TaCo's verification"
+                            }
+                          ]
+                        }
                       }
                     }
                   ]
@@ -482,14 +549,12 @@ Authorizes TACo to sign payout transfers from pool to winner.
 }
 ```
 
-**Key points:**
-- Verifies market has ended
-- Queries resolution source (e.g., CoinGecko) to determine winning outcome
-- TACo nodes reach consensus on the resolution
-- Queries on-chain for user's bet amount on winning side
-- Queries pool balances to calculate proportional payout
-- Verifies UserOp payout amount matches calculated expected payout
-- Verifies payout goes to the claimer's AA address
+**Key simplification:** TaCo doesn't calculate payouts or track bets. It just:
+1. Verifies Discord signature
+2. Queries resolution source to determine result
+3. Verifies the `claim(result)` parameter matches
+
+The contract handles everything else.
 
 ---
 
@@ -508,7 +573,7 @@ Authorizes TACo to sign payout transfers from pool to winner.
 }
 ```
 
-TACo queries: `https://api.coingecko.com/api/v3/coins/ethereum/history?date=01-06-2025`
+TaCo queries: `https://api.coingecko.com/api/v3/coins/ethereum/history?date=01-06-2025`
 
 ### On-Chain State
 
@@ -524,7 +589,7 @@ TACo queries: `https://api.coingecko.com/api/v3/coins/ethereum/history?date=01-0
 }
 ```
 
-TACo queries via `json-rpc` condition.
+TaCo queries via `eth_call`.
 
 ### External API
 
@@ -547,40 +612,7 @@ TACo queries via `json-rpc` condition.
 }
 ```
 
-Resolution requires a Discord signature from the designated resolver declaring the outcome.
-
----
-
-## Tracking User Bets On-Chain
-
-To calculate payouts, we need to know how much each user bet on the winning side.
-
-**Challenge:** Pool balance shows total, but not per-user breakdown.
-
-**Solutions:**
-
-### Option A: Event Logs
-
-The AA wallet's `execute()` emits events. TACo can query:
-```
-eth_getLogs({
-  address: winningPoolAddress,
-  topics: [keccak256("Received(address,uint256)")],
-  fromBlock: marketCreationBlock
-})
-```
-
-Filter for transfers from the claimer's AA address.
-
-### Option B: Transaction History via Indexer
-
-Query an indexer (Etherscan API, The Graph, etc.) for transactions to the pool address from the user's AA.
-
-### Option C: Commit Bet Hash On-Chain
-
-When betting, include a hash of (marketId, outcome, userAA, amount) in the transaction data. At claim time, verify the hash exists.
-
-**Recommendation:** Option A (event logs) if the AA emits events, otherwise Option B (indexer query).
+Resolution requires a Discord signature from the designated resolver.
 
 ---
 
@@ -590,20 +622,29 @@ When betting, include a hash of (marketId, outcome, userAA, amount) in the trans
 
 | Attack Vector | Prevention |
 |---------------|------------|
-| Bot forges bet | TACo verifies Discord signature |
-| Bot changes bet amount | Amount extracted from Discord payload, bound to UserOp |
-| Bot changes outcome | Outcome extracted from Discord payload, determines pool address |
-| Bot pays wrong amount | TACo calculates expected payout from on-chain data |
-| Bot pays wrong person | Payout recipient derived from Discord ID, verified in UserOp |
-| Bot resolves incorrectly | TACo queries resolution source directly |
-| Bot claims for losers | TACo verifies user bet on winning side |
+| Bot forges bet | TaCo verifies Discord signature |
+| Bot changes bet amount | Amount from Discord payload, verified in calldata |
+| Bot changes outcome | Outcome from Discord payload, verified in calldata |
+| Bot claims with wrong result | TaCo independently verifies resolution |
+| Bot pays wrong amount | Contract calculates payout, not bot |
+| Bot pays wrong person | Contract pays `msg.sender` (user's AA) |
+| Bot double-claims | Contract tracks `claimed` mapping |
 
 ### Trust Assumptions
 
 1. **Discord** - Authenticates users and signs interactions
-2. **Resolution source** - Price feeds, APIs, or admin signatures are accurate
-3. **TACo cohort** - M-of-N honest signers enforce conditions
-4. **On-chain** - Final source of truth for bets and payouts
+2. **Resolution source** - Price feeds, APIs are accurate
+3. **TaCo cohort** - M-of-N honest signers
+4. **Smart contract** - Correctly implements payout logic
+
+### What TaCo Provides
+
+TaCo's key value is **consensus on the resolution result**. Multiple independent nodes:
+1. Query the resolution source
+2. Verify the result
+3. Only sign if they agree
+
+This prevents a single point of failure in determining market outcomes.
 
 ---
 
@@ -611,79 +652,101 @@ When betting, include a hash of (marketId, outcome, userAA, amount) in the trans
 
 ### No Bets on One Side
 
-If everyone bets YES and the outcome is YES:
-- Winners get back their original bet (no profit)
-- `losingPoolTotal = 0`, so `payout = userBet`
+If everyone bets YES and outcome is YES:
+- Winners get back original bet (no losers to take from)
+- `losingPool = 0`, so `payout = userBet + 0 = userBet`
 
-If everyone bets YES and the outcome is NO:
-- No one can claim (no winners)
-- Funds remain in YES pool
-- Could add a "refund" mechanism for unresolvable markets
+If everyone bets YES and outcome is NO:
+- No winners, funds remain in contract
+- Could add admin refund function for edge cases
 
 ### Market Cancellation
 
-If a market needs to be cancelled:
-- Admin signs cancellation message
-- TACo condition allows refunds: everyone gets their bet back
-- Both pools return funds to original bettors
+Add a `cancel()` function callable by admin:
+```solidity
+function cancel() external onlyAdmin {
+    require(!resolved, "Already resolved");
+    cancelled = true;
+}
+```
+
+Users can then call `refund()` to get their bets back.
 
 ### Double Claim Prevention
 
-TACo condition must verify user hasn't already claimed:
-- Query on-chain for transfers from winning pool to user AA after market end date
-- If any exist, deny claim
+Built into contract:
+```solidity
+require(!claimed[msg.sender], "Already claimed");
+claimed[msg.sender] = true;
+```
+
+### First Claim Sets Resolution
+
+The first successful claim "locks in" the resolution:
+```solidity
+if (!resolved) {
+    resolved = true;
+    outcome = result;
+}
+```
+
+This is safe because TaCo only signs claims with the correct result.
 
 ---
 
 ## Supported Tokens
 
 ### ETH
-Direct value transfer in UserOp.
 
-### ERC-20 (USDC, tBTC, etc.)
-
-UserOp calldata calls token contract:
-```
-token.transfer(poolAddress, amount)
+```solidity
+function bet(bool _outcome) external payable {
+    // msg.value is the bet amount
+}
 ```
 
-Pool addresses are the same, but the "balance" is queried via:
-```
-token.balanceOf(poolAddress)
-```
+### ERC-20 (USDC, etc.)
 
-TACo conditions would use `eth_call` to query ERC-20 balances.
+Would need a separate contract or modified interface:
+```solidity
+function betToken(bool _outcome, uint256 amount) external {
+    token.transferFrom(msg.sender, address(this), amount);
+    // Track bet...
+}
+
+function claimToken(bool result) external {
+    // Calculate payout...
+    token.transfer(msg.sender, payout);
+}
+```
 
 ---
 
-## Future Extensions
+## New TaCo Capabilities Required
 
-1. **Multi-outcome markets** - More than YES/NO (e.g., "Which team wins?")
-2. **AMM pricing** - Dynamic odds based on bet ratios
-3. **Partial claims** - Claim a percentage before full resolution
-4. **Market creation fees** - Small fee to prevent spam
-5. **Dispute resolution** - Challenge mechanism for subjective markets
-6. **Liquidity provision** - LPs provide initial liquidity for better odds
-7. **Cross-server markets** - Markets visible across Discord servers
+1. **Historical price API queries** - Query CoinGecko for past prices
+2. **Date formatting** - Convert timestamps to API date formats
+3. **Dynamic endpoint interpolation** - Insert `:asset`, `:date` into URLs
 
----
-
-## New TACo Capabilities Required
-
-1. **Historical price API queries** - Query CoinGecko/etc. for past prices
-2. **Event log queries** - `eth_getLogs` to find user's bet transactions
-3. **Computed expressions** - Calculate payout from pool ratios
-4. **Date/time comparisons** - Verify market end date has passed
+**Not required (handled by contract):**
+- ~~Event log queries~~
+- ~~Computed expressions for payout math~~
+- ~~Tracking user bets~~
 
 ---
 
 ## Summary
 
-This design enables:
-- **Trustless betting** via TACo-signed UserOps
-- **TACo as oracle** - nodes query resolution sources and reach consensus
-- **On-chain bet tracking** - blockchain is the database
-- **Proportional payouts** - winners split the losing pool
-- **Discord-native UX** with `/predict create`, `/predict bet`, `/predict claim`
+This simplified design:
 
-The bot is a relay, not an authority. TACo is the cryptographic oracle that turns market outcomes into irreversible on-chain payouts.
+| Component | Responsibility |
+|-----------|---------------|
+| **Discord** | Authenticate users, sign interactions |
+| **Bot** | Relay requests, build UserOps (untrusted) |
+| **TaCo** | Verify Discord sig, verify resolution result (oracle) |
+| **Contract** | Track bets, calculate payouts, distribute funds |
+
+**TaCo as Oracle:** The key value TaCo provides is decentralized consensus on "what is the resolution result?" Multiple nodes independently verify, preventing any single point of manipulation.
+
+**Contract as State:** All bet tracking, payout calculation, and fund distribution happens on-chain in the contract. No complex off-chain computation or log reconstruction.
+
+**Bot as Relay:** The bot is fully untrusted. It can't forge bets (Discord sig), can't lie about results (TaCo verifies), and can't steal funds (contract controls payouts).
