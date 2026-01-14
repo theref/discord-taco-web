@@ -273,7 +273,7 @@ function createServer() {
                 `**Tip Sent!**\n` +
                 `> **From:** \`${shortenAddr(data.from)}\` (<@${data.fromDiscord}>)\n` +
                 `> **To:** \`${shortenAddr(data.to)}\` (<@${data.toDiscord}>)\n` +
-                `> **Amount:** ${data.amount} ${data.token}\n` +
+                `> **Amount:** ${data.netAmount} ${data.token} (+ ${data.feeAmount} ${data.token} fee)\n` +
                 `> **Chain:** ${data.chainName}\n` +
                 `> **TACo:** ${tacoTime}\n` +
                 `> **Gas Used:** ${gasUsedStr}\n` +

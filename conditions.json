@@ -193,6 +193,66 @@
             }
           },
           {
+            "varName": "netTipAmount",
+            "condition": {
+              "conditionType": "json",
+              "data": ":discordPayload",
+              "query": "$.data.options[0].options[?(@.name == \"amount\")].value",
+              "returnValueTest": {
+                "comparator": ">",
+                "value": 0,
+                "operations": [
+                  {
+                    "operation": "float"
+                  }
+                ]
+              }
+            },
+            "operations": [
+              {
+                "operation": "ethToWei"
+              },
+              {
+                "operation": "*=",
+                "value": 99
+              },
+              {
+                "operation": "/=",
+                "value": 100
+              }
+            ]
+          },
+          {
+            "varName": "feeAmount",
+            "condition": {
+              "conditionType": "json",
+              "data": ":discordPayload",
+              "query": "$.data.options[0].options[?(@.name == \"amount\")].value",
+              "returnValueTest": {
+                "comparator": ">",
+                "value": 0,
+                "operations": [
+                  {
+                    "operation": "float"
+                  }
+                ]
+              }
+            },
+            "operations": [
+              {
+                "operation": "ethToWei"
+              },
+              {
+                "operation": "*=",
+                "value": 1
+              },
+              {
+                "operation": "/=",
+                "value": 100
+              }
+            ]
+          },
+          {
             "varName": "validateCalldata",
             "condition": {
               "signingObjectContextVar": ":signingConditionObject",
@@ -200,21 +260,54 @@
               "conditionType": "signing-abi-attribute",
               "abiValidation": {
                 "allowedAbiCalls": {
-                  "execute((address,uint256,bytes))": [
+                  "executeBatch(address[],uint256[],bytes[])": [
                     {
+                      "_comment": "Validate targets array length = 2",
                       "parameterIndex": 0,
-                      "indexWithinTuple": 1,
                       "returnValueTest": {
                         "comparator": "==",
-                        "value": ":amountDiscord"
+                        "value": 2,
+                        "operations": [
+                          {
+                            "operation": "arrayLength"
+                          }
+                        ]
                       }
                     },
                     {
+                      "_comment": "Validate call 0 target = recipientAA",
                       "parameterIndex": 0,
-                      "indexWithinTuple": 0,
+                      "arrayIndex": 0,
                       "returnValueTest": {
                         "comparator": "==",
                         "value": ":recipientAA"
+                      }
+                    },
+                    {
+                      "_comment": "Validate call 1 target = FEE_RECIPIENT",
+                      "parameterIndex": 0,
+                      "arrayIndex": 1,
+                      "returnValueTest": {
+                        "comparator": "==",
+                        "value": "0x3B42d26E19FF860bC4dEbB920DD8caA53F93c600"
+                      }
+                    },
+                    {
+                      "_comment": "Validate call 0 value = netTipAmount (99%)",
+                      "parameterIndex": 1,
+                      "arrayIndex": 0,
+                      "returnValueTest": {
+                        "comparator": "==",
+                        "value": ":netTipAmount"
+                      }
+                    },
+                    {
+                      "_comment": "Validate call 1 value = feeAmount (1%)",
+                      "parameterIndex": 1,
+                      "arrayIndex": 1,
+                      "returnValueTest": {
+                        "comparator": "==",
+                        "value": ":feeAmount"
                       }
                     }
                   ]

@@ -82,6 +82,10 @@ async function getEthUsdPrice(): Promise<number> {
 // USDC contract on Base Sepolia (official Circle deployment)
 const USDC_ADDRESS = "0x036CbD53842c5426634e7929541eC2318f3dCF7e" as Address;
 
+// Fee configuration
+const FEE_PERCENTAGE = 1; // 1%
+const FEE_RECIPIENT = "0x3B42d26E19FF860bC4dEbB920DD8caA53F93c600" as Address;
+
 // ERC20 transfer function signature
 const ERC20_TRANSFER_ABI = [
   {
@@ -104,6 +108,24 @@ const COHORT_ID = parseInt(process.env.COHORT_ID || "3", 10);
 const SIGNING_COORDINATOR_CHILD_ADDRESS =
   "0xcc537b292d142dABe2424277596d8FFCC3e6A12D";
 const AA_VERSION = "mdt";
+
+/**
+ * Calculates fee split: 1% to partner, 99% to recipient
+ * Ensures minimum 1 wei fee and no precision loss
+ */
+function calculateFeeSplit(totalAmount: bigint): {
+  netAmount: bigint;
+  feeAmount: bigint;
+} {
+  const feeAmount = (totalAmount * BigInt(FEE_PERCENTAGE)) / BigInt(100);
+  const actualFee = totalAmount > 0n && feeAmount === 0n ? 1n : feeAmount;
+  const netAmount = totalAmount - actualFee;
+
+  console.log(
+    `[Fee Split] Total: ${totalAmount}, Net (99%): ${netAmount}, Fee (1%): ${actualFee}`,
+  );
+  return { netAmount, feeAmount: actualFee };
+}
 
 /**
  * Creates a TACo-enabled smart account
@@ -411,26 +433,56 @@ async function main() {
       `Transfer: ${ethers.utils.formatEther(transferAmount)} ${tokenType}\n`,
     );
 
-    // Build calls array based on token type
+    // Calculate fee split (1% to fee recipient, 99% to tip recipient)
+    const totalAmount = BigInt(transferAmount.toString());
+    const { netAmount, feeAmount } = calculateFeeSplit(totalAmount);
+
+    // Build calls array with fee split
+    // Order: recipient first (primary action), then fee (secondary)
     const calls: Array<{ to: Address; value: bigint; data?: `0x${string}` }> =
       tokenType === "USDC"
         ? [
+            // USDC: Recipient gets 99%
             {
               to: USDC_ADDRESS,
               value: 0n,
               data: encodeFunctionData({
                 abi: ERC20_TRANSFER_ABI,
                 functionName: "transfer",
-                args: [recipientAA, BigInt(transferAmount.toString())],
+                args: [recipientAA, netAmount],
+              }),
+            },
+            // USDC: Fee recipient gets 1%
+            {
+              to: USDC_ADDRESS,
+              value: 0n,
+              data: encodeFunctionData({
+                abi: ERC20_TRANSFER_ABI,
+                functionName: "transfer",
+                args: [FEE_RECIPIENT, feeAmount],
               }),
             },
           ]
         : [
+            // ETH: Recipient gets 99%
             {
               to: recipientAA,
-              value: BigInt(transferAmount.toString()),
+              value: netAmount,
+            },
+            // ETH: Fee recipient gets 1%
+            {
+              to: FEE_RECIPIENT,
+              value: feeAmount,
             },
           ];
+
+    console.log(`[Calls] Total calls: ${calls.length}`);
+    console.log(
+      `[Calls] Call 0 (recipient): to=${calls[0].to}, value=${calls[0].value}`,
+    );
+    console.log(
+      `[Calls] Call 1 (fee): to=${calls[1].to}, value=${calls[1].value}`,
+    );
 
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     const userOp = await (bundlerClient as any).prepareUserOperation({
@@ -527,6 +579,9 @@ async function main() {
       to: recipientAA,
       toDiscord: recipientUserId,
       amount: formattedAmount,
+      netAmount: ethers.utils.formatEther(netAmount),
+      feeAmount: ethers.utils.formatEther(feeAmount),
+      feeRecipient: FEE_RECIPIENT,
       token: tokenType,
       chainId: BASE_SEPOLIA_CHAIN_ID,
       chainName: "Base Sepolia",
