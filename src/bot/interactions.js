@@ -261,9 +261,13 @@ function createServer() {
               const tacoTime = data.tacoSigningMs
                 ? `${(data.tacoSigningMs / 1000).toFixed(2)}s`
                 : "N/A";
-              const gasStr = data.gasCostEth
-                ? `${parseFloat(data.gasCostEth).toFixed(6)} ETH`
+              const gasUsedStr = data.gasUsed
+                ? BigInt(data.gasUsed).toLocaleString()
                 : "N/A";
+              const estCostStr =
+                data.estMainnetCostUsd && data.estMainnetCostUsd !== "N/A"
+                  ? `$${data.estMainnetCostUsd}`
+                  : "N/A";
 
               message =
                 `**Tip Sent!**\n` +
@@ -272,7 +276,8 @@ function createServer() {
                 `> **Amount:** ${data.amount} ${data.token}\n` +
                 `> **Chain:** ${data.chainName}\n` +
                 `> **TACo:** ${tacoTime}\n` +
-                `> **Gas:** ${gasStr}\n\n` +
+                `> **Gas Used:** ${gasUsedStr}\n` +
+                `> **Est. Mainnet Cost:** ${estCostStr}\n\n` +
                 `<${data.explorerUrl}>`;
             } catch {
               // Fallback if JSON parsing fails

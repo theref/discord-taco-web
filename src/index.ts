@@ -32,6 +32,53 @@ import { createViemTacoAccount } from "./taco-account";
 
 dotenv.config();
 
+// Base mainnet RPC URL for gas estimation
+const BASE_MAINNET_RPC_URL =
+  process.env.BASE_MAINNET_RPC_URL || "https://mainnet.base.org";
+
+/**
+ * Fetch current gas price from Base mainnet for cost estimation.
+ * Returns 0n on failure (graceful degradation).
+ */
+async function getMainnetGasPrice(): Promise<bigint> {
+  try {
+    const mainnetClient = createPublicClient({
+      chain: {
+        id: 8453,
+        name: "Base",
+        nativeCurrency: { name: "Ether", symbol: "ETH", decimals: 18 },
+        rpcUrls: { default: { http: [BASE_MAINNET_RPC_URL] } },
+      } as const,
+      transport: http(BASE_MAINNET_RPC_URL),
+    });
+    const gasPrice = await mainnetClient.getGasPrice();
+    console.log(`[Gas] Mainnet gas price: ${gasPrice} wei`);
+    return gasPrice;
+  } catch (err) {
+    console.warn("[Gas] Failed to fetch mainnet gas price:", err);
+    return BigInt(0);
+  }
+}
+
+/**
+ * Fetch ETH/USD price from CoinGecko API for cost estimation.
+ * Returns 0 on failure (graceful degradation).
+ */
+async function getEthUsdPrice(): Promise<number> {
+  try {
+    const response = await fetch(
+      "https://api.coingecko.com/api/v3/simple/price?ids=ethereum&vs_currencies=usd",
+    );
+    const data = (await response.json()) as { ethereum?: { usd?: number } };
+    const price = data?.ethereum?.usd ?? 0;
+    console.log(`[Gas] ETH/USD price: $${price}`);
+    return price;
+  } catch (err) {
+    console.warn("[Gas] Failed to fetch ETH/USD price:", err);
+    return 0;
+  }
+}
+
 // USDC contract on Base Sepolia (official Circle deployment)
 const USDC_ADDRESS = "0x036CbD53842c5426634e7929541eC2318f3dCF7e" as Address;
 
@@ -431,11 +478,24 @@ async function main() {
     const shortenAddr = (addr: string) =>
       `${addr.slice(0, 10)}...${addr.slice(-8)}`;
 
-    // Calculate gas cost from receipt
+    // Extract gas used from receipt (same on testnet/mainnet)
     const gasUsed = receipt.gasUsed ?? BigInt(0);
-    const effectiveGasPrice = receipt.effectiveGasPrice ?? BigInt(0);
-    const gasCostWei = gasUsed * effectiveGasPrice;
-    const gasCostEth = ethers.utils.formatEther(gasCostWei.toString());
+
+    // Fetch mainnet gas price and ETH/USD for cost estimation (in parallel)
+    const [mainnetGasPrice, ethUsdPrice] = await Promise.all([
+      getMainnetGasPrice(),
+      getEthUsdPrice(),
+    ]);
+
+    // Calculate estimated mainnet cost in USD
+    let estMainnetCostUsd = "N/A";
+    if (mainnetGasPrice > 0n && ethUsdPrice > 0) {
+      const estGasCostWei = gasUsed * mainnetGasPrice;
+      const estGasCostEth = parseFloat(
+        ethers.utils.formatEther(estGasCostWei.toString()),
+      );
+      estMainnetCostUsd = (estGasCostEth * ethUsdPrice).toFixed(4);
+    }
 
     console.log("\n" + "=".repeat(60));
     console.log("                  TRANSACTION SUCCESSFUL");
@@ -450,7 +510,8 @@ async function main() {
     console.log(`  Amount:   ${formattedAmount} ${tokenType}`);
     console.log(`  Chain:    Base Sepolia (${BASE_SEPOLIA_CHAIN_ID})`);
     console.log(`  TACo:     Signed in ${signature.signingTimeMs}ms`);
-    console.log(`  Gas:      ${gasCostEth} ETH`);
+    console.log(`  Gas Used: ${gasUsed.toLocaleString()}`);
+    console.log(`  Est. Mainnet Cost: $${estMainnetCostUsd}`);
     console.log();
     console.log(`  Tx:       ${txHash}`);
     console.log(`  Explorer: ${explorerUrl}`);
@@ -470,7 +531,8 @@ async function main() {
       chainId: BASE_SEPOLIA_CHAIN_ID,
       chainName: "Base Sepolia",
       tacoSigningMs: signature.signingTimeMs,
-      gasCostEth,
+      gasUsed: gasUsed.toString(),
+      estMainnetCostUsd,
     });
     console.log(`SUCCESS:${successData}`);
     process.exit(0);
