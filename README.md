@@ -147,8 +147,23 @@ Handles incoming Discord slash commands:
 1. **Signature Verification** - Validates Discord's Ed25519 signature using `tweetnacl`
 2. **UserOp Building** - Derives addresses and builds the ERC-4337 UserOperation
 3. **Process Spawning** - Runs `pnpm start` with the three context environment variables
-4. **Follow-up Messages** - Sends transaction result back to Discord via webhook API
+4. **Follow-up Messages** - Parses JSON output and sends formatted transaction result back to Discord
 5. **Concurrency Control** - Prevents multiple simultaneous tip executions
+
+**Discord Message Format:**
+
+On success, users see a nicely formatted message:
+
+```
+**Tip Sent!**
+> **From:** `0x420AcFa5...44807737C` (@sender)
+> **To:** `0x2a456304...d5d2d7E0` (@recipient)
+> **Amount:** 0.001 ETH
+> **Chain:** Base Sepolia
+> **TACo:** 1.23s
+
+<https://sepolia.basescan.org/tx/0x...>
+```
 
 ### `src/bot/deploy-commands.js` - Command Registration
 

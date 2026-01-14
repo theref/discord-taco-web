@@ -249,27 +249,43 @@ function createServer() {
       // Start demo and send follow-up when complete
       const child = startDemo(envOverrides, async ({ code, stdout }) => {
         let message;
-        // Extract TACo signing time from output
-        const signingTimeMatch = stdout.match(/TACO_SIGNING_TIME_MS:(\d+)/);
-        const signingTimeMs = signingTimeMatch ? signingTimeMatch[1] : null;
-        const signingTimeStr = signingTimeMs
-          ? ` (TACo signing: ${(signingTimeMs / 1000).toFixed(2)}s)`
-          : "";
 
         if (code === 0) {
-          // Extract tx hash from output
-          const txMatch = stdout.match(/Tx: (0x[a-fA-F0-9]+)/);
-          const txHash = txMatch ? txMatch[1] : null;
-          if (txHash) {
-            message = `Tip sent!${signingTimeStr} [View on BaseScan](https://sepolia.basescan.org/tx/${txHash})`;
+          // Parse SUCCESS JSON from output
+          const successMatch = stdout.match(/SUCCESS:(\{.*\})/);
+          if (successMatch) {
+            try {
+              const data = JSON.parse(successMatch[1]);
+              const shortenAddr = (addr) =>
+                `${addr.slice(0, 10)}...${addr.slice(-8)}`;
+              const tacoTime = data.tacoSigningMs
+                ? `${(data.tacoSigningMs / 1000).toFixed(2)}s`
+                : "N/A";
+              const gasStr = data.gasCostEth
+                ? `${parseFloat(data.gasCostEth).toFixed(6)} ETH`
+                : "N/A";
+
+              message =
+                `**Tip Sent!**\n` +
+                `> **From:** \`${shortenAddr(data.from)}\` (<@${data.fromDiscord}>)\n` +
+                `> **To:** \`${shortenAddr(data.to)}\` (<@${data.toDiscord}>)\n` +
+                `> **Amount:** ${data.amount} ${data.token}\n` +
+                `> **Chain:** ${data.chainName}\n` +
+                `> **TACo:** ${tacoTime}\n` +
+                `> **Gas:** ${gasStr}\n\n` +
+                `<${data.explorerUrl}>`;
+            } catch {
+              // Fallback if JSON parsing fails
+              message = `Tip sent! [View transaction](https://sepolia.basescan.org)`;
+            }
           } else {
-            message = `Tip sent successfully!${signingTimeStr}`;
+            message = `Tip sent successfully!`;
           }
         } else {
           // Extract error from output
           const errorMatch = stdout.match(/Demo failed: (.+)/);
           const error = errorMatch ? errorMatch[1] : "Unknown error";
-          message = `Tip failed: ${error}${signingTimeStr}`;
+          message = `**Tip Failed**\n> ${error}`;
         }
 
         if (applicationId && interactionToken) {

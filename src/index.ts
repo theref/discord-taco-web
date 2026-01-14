@@ -424,27 +424,55 @@ async function main() {
       hash: userOpHash,
     });
 
-    // Transaction succeeded - output success info for Discord bot
+    // Transaction succeeded - output formatted success info
     const txHash = receipt.transactionHash;
     const explorerUrl = `https://sepolia.basescan.org/tx/${txHash}`;
-    console.log(`\nTransaction successful!`);
-    console.log(`Tx: ${txHash}`);
-    console.log(`Explorer: ${explorerUrl}\n`);
+    const formattedAmount = ethers.utils.formatEther(transferAmount);
+    const shortenAddr = (addr: string) =>
+      `${addr.slice(0, 10)}...${addr.slice(-8)}`;
 
-    // Try to log balances but don't fail if RPC has issues
-    try {
-      await logBalances(
-        signingChainProvider,
-        localAccount.address,
-        smartAccount.address,
-      );
-    } catch (balanceErr) {
-      console.log("(Could not fetch final balances - RPC error)");
-    }
+    // Calculate gas cost from receipt
+    const gasUsed = receipt.gasUsed ?? BigInt(0);
+    const effectiveGasPrice = receipt.effectiveGasPrice ?? BigInt(0);
+    const gasCostWei = gasUsed * effectiveGasPrice;
+    const gasCostEth = ethers.utils.formatEther(gasCostWei.toString());
 
-    console.log("Demo completed successfully!");
+    console.log("\n" + "=".repeat(60));
+    console.log("                  TRANSACTION SUCCESSFUL");
+    console.log("=".repeat(60));
+    console.log();
+    console.log(
+      `  From:     ${shortenAddr(smartAccount.address)} (Discord: ${senderDiscordId})`,
+    );
+    console.log(
+      `  To:       ${shortenAddr(recipientAA)} (Discord: ${recipientUserId})`,
+    );
+    console.log(`  Amount:   ${formattedAmount} ${tokenType}`);
+    console.log(`  Chain:    Base Sepolia (${BASE_SEPOLIA_CHAIN_ID})`);
+    console.log(`  TACo:     Signed in ${signature.signingTimeMs}ms`);
+    console.log(`  Gas:      ${gasCostEth} ETH`);
+    console.log();
+    console.log(`  Tx:       ${txHash}`);
+    console.log(`  Explorer: ${explorerUrl}`);
+    console.log();
+    console.log("=".repeat(60));
+
     // Output structured success for Discord bot parsing
-    console.log(`SUCCESS:${txHash}:${explorerUrl}`);
+    const successData = JSON.stringify({
+      txHash,
+      explorerUrl,
+      from: smartAccount.address,
+      fromDiscord: senderDiscordId,
+      to: recipientAA,
+      toDiscord: recipientUserId,
+      amount: formattedAmount,
+      token: tokenType,
+      chainId: BASE_SEPOLIA_CHAIN_ID,
+      chainName: "Base Sepolia",
+      tacoSigningMs: signature.signingTimeMs,
+      gasCostEth,
+    });
+    console.log(`SUCCESS:${successData}`);
     process.exit(0);
   } catch (error: unknown) {
     const errorMessage = error instanceof Error ? error.message : String(error);
