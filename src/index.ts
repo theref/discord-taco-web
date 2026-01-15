@@ -209,17 +209,30 @@ async function signUserOpWithTaco(
     );
   console.log("[TACo] Signing context fetched successfully");
 
+  // Calculate maxAllowedCreationTime: accounts must be at least MIN_ACCOUNT_AGE_DAYS old
+  // This is passed as a context parameter so TACo can enforce account age trustlessly
+  const MIN_ACCOUNT_AGE_DAYS = parseInt(
+    process.env.MIN_ACCOUNT_AGE_DAYS || "7",
+    10,
+  );
+  const maxAllowedCreationTime =
+    Date.now() - MIN_ACCOUNT_AGE_DAYS * 24 * 60 * 60 * 1000;
+
   // Add our context parameters for condition evaluation
   (signingContext as any).customContextParameters = {
     ":timestamp": discordContext.timestamp,
     ":signature": discordContext.signature,
     ":discordPayload": discordContext.payload,
+    ":maxAllowedCreationTime": String(maxAllowedCreationTime),
   };
 
   console.log("[TACo] Context parameters:");
   console.log("  :timestamp =", discordContext.timestamp);
   console.log("  :signature =", discordContext.signature);
   console.log("  :discordPayload =", discordContext.payload);
+  console.log(
+    `  :maxAllowedCreationTime = ${maxAllowedCreationTime} (accounts must be created before ${new Date(maxAllowedCreationTime).toISOString()})`,
+  );
 
   console.log("[TACo] Calling signUserOp...");
   const startTime = Date.now();

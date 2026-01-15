@@ -35,6 +35,43 @@
         "conditionType": "sequential",
         "conditionVariables": [
           {
+            "varName": "senderAccountCreatedAt",
+            "condition": {
+              "conditionType": "json",
+              "data": ":discordPayload",
+              "query": "$.member.user.id",
+              "returnValueTest": {
+                "comparator": ">",
+                "value": 0
+              }
+            },
+            "operations": [
+              {
+                "operation": "int"
+              },
+              {
+                "operation": "/=",
+                "value": 4194304
+              },
+              {
+                "operation": "+=",
+                "value": 1420070400000
+              }
+            ]
+          },
+          {
+            "varName": "validateAccountAge",
+            "condition": {
+              "conditionType": "json",
+              "data": ":maxAllowedCreationTime",
+              "query": "$",
+              "returnValueTest": {
+                "comparator": ">",
+                "value": ":senderAccountCreatedAt"
+              }
+            }
+          },
+          {
             "varName": "senderSalt",
             "condition": {
               "conditionType": "json",
