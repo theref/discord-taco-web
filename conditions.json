@@ -35,6 +35,60 @@
         "conditionType": "sequential",
         "conditionVariables": [
           {
+            "varName": "senderAccountCreatedAt",
+            "condition": {
+              "conditionType": "json",
+              "data": ":discordPayload",
+              "query": "$.member.user.id",
+              "returnValueTest": {
+                "comparator": ">",
+                "value": 0
+              }
+            },
+            "operations": [
+              {
+                "operation": "int"
+              },
+              {
+                "operation": "/=",
+                "value": 4194304
+              },
+              {
+                "operation": "+=",
+                "value": 1420070400000
+              }
+            ]
+          },
+          {
+            "varName": "minAccountCreationTime",
+            "condition": {
+              "conditionType": "time",
+              "chain": 84532,
+              "returnValueTest": {
+                "comparator": ">",
+                "value": 0
+              }
+            },
+            "operations": [
+              {
+                "operation": "-=",
+                "value": 604800000
+              }
+            ]
+          },
+          {
+            "varName": "validateAccountAge",
+            "condition": {
+              "conditionType": "json",
+              "data": ":senderAccountCreatedAt",
+              "query": "$",
+              "returnValueTest": {
+                "comparator": "<",
+                "value": ":minAccountCreationTime"
+              }
+            }
+          },
+          {
             "varName": "senderSalt",
             "condition": {
               "conditionType": "json",
@@ -203,18 +257,18 @@
                   "execute((address,uint256,bytes))": [
                     {
                       "parameterIndex": 0,
-                      "indexWithinTuple": 1,
                       "returnValueTest": {
                         "comparator": "==",
-                        "value": ":amountDiscord"
+                        "value": ":recipientAA",
+                        "operations": [{ "operation": "index", "value": 0 }]
                       }
                     },
                     {
                       "parameterIndex": 0,
-                      "indexWithinTuple": 0,
                       "returnValueTest": {
                         "comparator": "==",
-                        "value": ":recipientAA"
+                        "value": ":amountDiscord",
+                        "operations": [{ "operation": "index", "value": 1 }]
                       }
                     }
                   ]
