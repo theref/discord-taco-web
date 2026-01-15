@@ -13,6 +13,9 @@ const DISCORD_EPOCH = 1420070400000n;
 // Minimum account age in days (configurable via env)
 const MIN_ACCOUNT_AGE_DAYS = Number(process.env.MIN_ACCOUNT_AGE_DAYS || 7);
 
+// Minimum tip amount in ETH (~$0.33 at $3,300/ETH)
+const MIN_TIP_AMOUNT_ETH = Number(process.env.MIN_TIP_AMOUNT_ETH || 0.0001);
+
 /**
  * Extract creation timestamp from Discord snowflake ID.
  * Discord snowflakes encode timestamp in bits 22-63.
@@ -225,6 +228,28 @@ function createServer() {
       if (amountOpt != null) amount = String(amountOpt);
       if (recipientOpt) recipientUserId = String(recipientOpt);
       if (tokenOpt) tokenType = String(tokenOpt);
+
+      // Validate minimum tip amount for ETH
+      if (tokenType === "ETH") {
+        const amountFloat = parseFloat(amount);
+        if (isNaN(amountFloat) || amountFloat < MIN_TIP_AMOUNT_ETH) {
+          console.log(
+            `   ✗ Amount too small: ${amount} ETH (min: ${MIN_TIP_AMOUNT_ETH})`,
+          );
+          res.writeHead(200, { "content-type": "application/json" });
+          res.end(
+            JSON.stringify({
+              type: 4,
+              data: {
+                content: `Minimum tip amount is ${MIN_TIP_AMOUNT_ETH} ETH (~$0.33). You tried to send ${amount} ETH.`,
+                flags: 64, // Ephemeral
+              },
+            }),
+          );
+          return;
+        }
+        console.log(`   ✓ Amount OK: ${amount} ETH`);
+      }
 
       const envOverrides = {
         CONTEXT_TIMESTAMP: String(ts),

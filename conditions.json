@@ -169,8 +169,8 @@
               "data": ":discordPayload",
               "query": "$.data.options[0].options[?(@.name == \"amount\")].value",
               "returnValueTest": {
-                "comparator": ">",
-                "value": 0,
+                "comparator": ">=",
+                "value": 0.0001,
                 "operations": [
                   {
                     "operation": "float"
