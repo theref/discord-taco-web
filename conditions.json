@@ -64,12 +64,17 @@
             "condition": {
               "conditionType": "time",
               "chain": 84532,
+              "method": "blocktime",
               "returnValueTest": {
                 "comparator": ">",
                 "value": 0
               }
             },
             "operations": [
+              {
+                "operation": "*=",
+                "value": 1000
+              },
               {
                 "operation": "-=",
                 "value": 604800000
