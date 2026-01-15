@@ -60,14 +60,31 @@
             ]
           },
           {
+            "varName": "minAccountCreationTime",
+            "condition": {
+              "conditionType": "time",
+              "chain": 84532,
+              "returnValueTest": {
+                "comparator": ">",
+                "value": 0
+              }
+            },
+            "operations": [
+              {
+                "operation": "-=",
+                "value": 604800000
+              }
+            ]
+          },
+          {
             "varName": "validateAccountAge",
             "condition": {
               "conditionType": "json",
-              "data": ":maxAllowedCreationTime",
+              "data": ":senderAccountCreatedAt",
               "query": "$",
               "returnValueTest": {
-                "comparator": ">",
-                "value": ":senderAccountCreatedAt"
+                "comparator": "<",
+                "value": ":minAccountCreationTime"
               }
             }
           },
