@@ -240,18 +240,18 @@
                   "execute((address,uint256,bytes))": [
                     {
                       "parameterIndex": 0,
-                      "indexWithinTuple": 1,
                       "returnValueTest": {
                         "comparator": "==",
-                        "value": ":amountDiscord"
+                        "value": ":recipientAA",
+                        "operations": [{ "operation": "index", "value": 0 }]
                       }
                     },
                     {
                       "parameterIndex": 0,
-                      "indexWithinTuple": 0,
                       "returnValueTest": {
                         "comparator": "==",
-                        "value": ":recipientAA"
+                        "value": ":amountDiscord",
+                        "operations": [{ "operation": "index", "value": 1 }]
                       }
                     }
                   ]
