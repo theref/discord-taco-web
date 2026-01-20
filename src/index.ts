@@ -37,6 +37,90 @@ const BASE_MAINNET_RPC_URL =
   process.env.BASE_MAINNET_RPC_URL || "https://mainnet.base.org";
 
 /**
+ * Decode revert reason from hex-encoded error data.
+ * Handles Error(string) format (selector 0x08c379a0).
+ */
+function decodeRevertReason(hexData: string): string | null {
+  try {
+    // Error(string) selector
+    if (hexData.startsWith("0x08c379a0")) {
+      const abiCoder = new ethers.utils.AbiCoder();
+      const decoded = abiCoder.decode(
+        ["string"],
+        "0x" + hexData.slice(10), // Skip selector (4 bytes = 8 hex chars + 0x)
+      );
+      return decoded[0];
+    }
+    // Panic(uint256) selector
+    if (hexData.startsWith("0x4e487b71")) {
+      const abiCoder = new ethers.utils.AbiCoder();
+      const decoded = abiCoder.decode(["uint256"], "0x" + hexData.slice(10));
+      const panicCodes: Record<number, string> = {
+        0x00: "Generic compiler panic",
+        0x01: "Assertion failed",
+        0x11: "Arithmetic overflow/underflow",
+        0x12: "Division by zero",
+        0x21: "Invalid enum value",
+        0x22: "Invalid storage access",
+        0x31: "Pop on empty array",
+        0x32: "Array index out of bounds",
+        0x41: "Out of memory",
+        0x51: "Uninitialized function pointer",
+      };
+      return panicCodes[decoded[0].toNumber()] || `Panic code: ${decoded[0]}`;
+    }
+    return null;
+  } catch {
+    return null;
+  }
+}
+
+/**
+ * Parse error message and return user-friendly description.
+ */
+function getUserFriendlyError(error: unknown, tokenType: string): string {
+  const errorMessage = error instanceof Error ? error.message : String(error);
+
+  // Try to extract and decode hex revert reason
+  const hexMatch = errorMessage.match(/0x[0-9a-fA-F]{8,}/);
+  if (hexMatch) {
+    const decoded = decodeRevertReason(hexMatch[0]);
+    if (decoded) {
+      // Map common errors to user-friendly messages
+      if (decoded.includes("transfer amount exceeds balance")) {
+        return `Insufficient ${tokenType} balance. The sender's wallet doesn't have enough ${tokenType} to complete this transfer.`;
+      }
+      if (decoded.includes("insufficient allowance")) {
+        return `Insufficient ${tokenType} allowance. The token approval is too low.`;
+      }
+      if (decoded.includes("exceeds allowance")) {
+        return `${tokenType} transfer exceeds approved allowance.`;
+      }
+      // Return decoded message if no specific mapping
+      return `Transaction failed: ${decoded}`;
+    }
+  }
+
+  // Handle common error patterns
+  if (errorMessage.includes("insufficient funds")) {
+    return "Insufficient ETH for gas fees. Please fund the smart account with more ETH.";
+  }
+  if (errorMessage.includes("nonce")) {
+    return "Transaction nonce error. Please try again.";
+  }
+  if (errorMessage.includes("gas")) {
+    return "Gas estimation failed. The transaction may not be valid.";
+  }
+
+  // Truncate very long error messages
+  if (errorMessage.length > 200) {
+    return errorMessage.substring(0, 200) + "...";
+  }
+
+  return errorMessage;
+}
+
+/**
  * Fetch current gas price from Base mainnet for cost estimation.
  * Returns 0n on failure (graceful degradation).
  */
@@ -79,8 +163,112 @@ async function getEthUsdPrice(): Promise<number> {
   }
 }
 
-// USDC contract on Base Sepolia (official Circle deployment)
-const USDC_ADDRESS = "0x036CbD53842c5426634e7929541eC2318f3dCF7e" as Address;
+// Token list API for contract address lookup
+const TOKEN_LIST_API_URL =
+  process.env.TOKEN_LIST_API_URL ||
+  "https://tokens.coingecko.com/base-sepolia/all.json";
+
+// Fallback token addresses (used if API lookup fails)
+const FALLBACK_TOKEN_ADDRESSES: Record<string, Record<number, Address>> = {
+  USDC: {
+    84532: "0x036CbD53842c5426634e7929541eC2318f3dCF7e" as Address, // Base Sepolia
+    8453: "0x833589fCD6eDb6E08f4c7C32D4f71b54bdA02913" as Address, // Base Mainnet
+  },
+};
+
+// ERC20 decimals function ABI
+const ERC20_DECIMALS_ABI = [
+  {
+    name: "decimals",
+    type: "function",
+    inputs: [],
+    outputs: [{ type: "uint8" }],
+    stateMutability: "view",
+  },
+] as const;
+
+/**
+ * Fetch token contract address from token list API.
+ * Falls back to hardcoded addresses if API fails.
+ */
+async function getTokenAddress(
+  tokenSymbol: string,
+  chainId: number,
+): Promise<Address> {
+  // Normalize token symbol
+  const symbol = tokenSymbol.toUpperCase();
+
+  try {
+    // Try API lookup first
+    const response = await fetch(TOKEN_LIST_API_URL);
+    if (response.ok) {
+      const data = (await response.json()) as {
+        tokens?: Array<{
+          symbol: string;
+          address: string;
+          chainId?: number;
+        }>;
+      };
+      const token = data.tokens?.find(
+        (t) =>
+          t.symbol.toUpperCase() === symbol &&
+          (t.chainId === chainId || !t.chainId),
+      );
+      if (token?.address) {
+        console.log(
+          `[Token] Found ${symbol} address from API: ${token.address}`,
+        );
+        return token.address as Address;
+      }
+    }
+  } catch (err) {
+    console.warn(`[Token] API lookup failed for ${symbol}:`, err);
+  }
+
+  // Fallback to hardcoded addresses
+  const fallback = FALLBACK_TOKEN_ADDRESSES[symbol]?.[chainId];
+  if (fallback) {
+    console.log(`[Token] Using fallback address for ${symbol}: ${fallback}`);
+    return fallback;
+  }
+
+  throw new Error(
+    `Unknown token ${symbol} on chain ${chainId}. No API result or fallback available.`,
+  );
+}
+
+/**
+ * Fetch token decimals from the token contract.
+ * Returns 18 for ETH, calls decimals() for ERC20 tokens.
+ */
+async function getTokenDecimals(
+  tokenSymbol: string,
+  tokenAddress: Address,
+  provider: ethers.providers.JsonRpcProvider,
+): Promise<number> {
+  const symbol = tokenSymbol.toUpperCase();
+
+  // ETH always has 18 decimals
+  if (symbol === "ETH") {
+    return 18;
+  }
+
+  try {
+    const contract = new ethers.Contract(
+      tokenAddress,
+      ["function decimals() view returns (uint8)"],
+      provider,
+    );
+    const decimals = await contract.decimals();
+    console.log(`[Token] ${symbol} decimals: ${decimals}`);
+    return decimals;
+  } catch (err) {
+    console.warn(`[Token] Failed to fetch decimals for ${symbol}:`, err);
+    // Common fallbacks
+    if (symbol === "USDC" || symbol === "USDT") return 6;
+    return 18;
+  }
+}
 
 // ERC20 transfer function signature
 const ERC20_TRANSFER_ABI = [
@@ -259,6 +447,7 @@ async function logBalances(
 }
 
 async function main() {
+  let tokenType = "ETH"; // Default, will be updated from Discord payload
   try {
     // Validate required Discord context
     const discordTimestamp = process.env.CONTEXT_TIMESTAMP;
@@ -389,10 +578,29 @@ async function main() {
     const tokenOpt = opts.find(
       (o: { name: string }) => o?.name === "token",
     )?.value;
-    const tokenType = String(tokenOpt ?? process.env.TIP_TOKEN_TYPE ?? "ETH");
-    const transferAmount = ethers.utils.parseEther(
-      String(amountOpt ?? process.env.TIP_AMOUNT_ETH ?? "0.0001"),
+    tokenType = String(tokenOpt ?? process.env.TIP_TOKEN_TYPE ?? "ETH");
+
+    // Get token address and decimals dynamically
+    let tokenAddress: Address | null = null;
+    let tokenDecimals = 18;
+
+    if (tokenType !== "ETH") {
+      tokenAddress = await getTokenAddress(tokenType, BASE_SEPOLIA_CHAIN_ID);
+      tokenDecimals = await getTokenDecimals(
+        tokenType,
+        tokenAddress,
+        signingChainProvider,
+      );
+      console.log(
+        `[Token] ${tokenType} address: ${tokenAddress}, decimals: ${tokenDecimals}`,
+      );
+    }
+
+    // Parse amount based on token decimals
+    const amountStr = String(
+      amountOpt ?? process.env.TIP_AMOUNT_ETH ?? "0.0001",
     );
+    const transferAmount = ethers.utils.parseUnits(amountStr, tokenDecimals);
 
     // Derive recipient AA address (sender AA is already smartAccount.address)
     console.log(`Deriving recipient AA for Discord user ${recipientUserId}...`);
@@ -407,16 +615,18 @@ async function main() {
 
     // Prepare user operation calls based on token type
     console.log("Preparing user operation...");
-    console.log(
-      `Transfer: ${ethers.utils.formatEther(transferAmount)} ${tokenType}\n`,
+    const formattedTransferAmount = ethers.utils.formatUnits(
+      transferAmount,
+      tokenDecimals,
     );
+    console.log(`Transfer: ${formattedTransferAmount} ${tokenType}\n`);
 
     // Build calls array based on token type
     const calls: Array<{ to: Address; value: bigint; data?: `0x${string}` }> =
-      tokenType === "USDC"
+      tokenAddress
         ? [
             {
-              to: USDC_ADDRESS,
+              to: tokenAddress,
               value: 0n,
               data: encodeFunctionData({
                 abi: ERC20_TRANSFER_ABI,
@@ -474,7 +684,10 @@ async function main() {
     // Transaction succeeded - output formatted success info
     const txHash = receipt.transactionHash;
     const explorerUrl = `https://sepolia.basescan.org/tx/${txHash}`;
-    const formattedAmount = ethers.utils.formatEther(transferAmount);
+    const formattedAmount = ethers.utils.formatUnits(
+      transferAmount,
+      tokenDecimals,
+    );
     const shortenAddr = (addr: string) =>
       `${addr.slice(0, 10)}...${addr.slice(-8)}`;
 
@@ -537,9 +750,21 @@ async function main() {
     console.log(`SUCCESS:${successData}`);
     process.exit(0);
   } catch (error: unknown) {
-    const errorMessage = error instanceof Error ? error.message : String(error);
-    console.error(`Demo failed: ${errorMessage}`);
-    console.log("FAILED:" + errorMessage);
+    const rawErrorMessage =
+      error instanceof Error ? error.message : String(error);
+    const userFriendlyError = getUserFriendlyError(error, tokenType);
+
+    console.error(`Demo failed: ${rawErrorMessage}`);
+
+    // Output structured error for Discord bot parsing
+    const errorData = JSON.stringify({
+      error: userFriendlyError,
+      rawError:
+        rawErrorMessage.length > 500
+          ? rawErrorMessage.substring(0, 500) + "..."
+          : rawErrorMessage,
+    });
+    console.log("FAILED:" + errorData);
     process.exit(1);
   }
 }

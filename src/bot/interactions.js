@@ -312,9 +312,28 @@ function createServer() {
             message = `Tip sent successfully!`;
           }
         } else {
-          // Extract error from output
-          const errorMatch = stdout.match(/Demo failed: (.+)/);
-          const error = errorMatch ? errorMatch[1] : "Unknown error";
+          // Extract error from output - try JSON format first, then fallback
+          const failedMatch = stdout.match(/FAILED:(.+)/);
+          let error = "Unknown error";
+          if (failedMatch) {
+            try {
+              const errorData = JSON.parse(failedMatch[1]);
+              error = errorData.error || errorData.rawError || "Unknown error";
+            } catch {
+              // Not JSON, use raw match
+              error = failedMatch[1];
+            }
+          } else {
+            // Fallback to old format
+            const errorMatch = stdout.match(/Demo failed: (.+)/);
+            if (errorMatch) {
+              error = errorMatch[1];
+            }
+          }
+          // Truncate very long errors for Discord
+          if (error.length > 500) {
+            error = error.substring(0, 500) + "...";
+          }
           message = `**Tip Failed**\n> ${error}`;
         }
 
