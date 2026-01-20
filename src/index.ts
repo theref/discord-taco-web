@@ -447,6 +447,57 @@ async function logBalances(
 }
 
 async function main() {
+  // Handle balance check mode
+  if (process.env.MODE === "balance") {
+    try {
+      const discordUserId = process.env.DISCORD_USER_ID;
+      if (!discordUserId) {
+        throw new Error("DISCORD_USER_ID required for balance check");
+      }
+
+      const signingChainProvider = new ethers.providers.JsonRpcProvider(
+        process.env.SIGNING_CHAIN_RPC_URL!,
+      );
+      const signingCoordinatorProvider = new ethers.providers.JsonRpcProvider(
+        process.env.ETH_RPC_URL!,
+      );
+      const publicClient = createPublicClient({
+        chain: baseSepolia,
+        transport: http(process.env.SIGNING_CHAIN_RPC_URL),
+      });
+
+      const aaAddress = await deriveDiscordUserAA(
+        publicClient as any,
+        signingCoordinatorProvider,
+        signingChainProvider,
+        discordUserId,
+      );
+
+      const ethBalance = await signingChainProvider.getBalance(aaAddress);
+      const usdcAddress = FALLBACK_TOKEN_ADDRESSES.USDC[84532];
+      const usdcContract = new ethers.Contract(
+        usdcAddress,
+        ["function balanceOf(address) view returns (uint256)"],
+        signingChainProvider,
+      );
+      const usdcBalance = await usdcContract.balanceOf(aaAddress);
+
+      console.log(
+        `BALANCE:${JSON.stringify({
+          discordUserId,
+          aaAddress,
+          eth: ethers.utils.formatEther(ethBalance),
+          usdc: ethers.utils.formatUnits(usdcBalance, 6),
+        })}`,
+      );
+      return;
+    } catch (error) {
+      const message = error instanceof Error ? error.message : String(error);
+      console.log(`BALANCE_ERROR:${JSON.stringify({ error: message })}`);
+      process.exit(1);
+    }
+  }
+
   let tokenType = "ETH"; // Default, will be updated from Discord payload
   try {
     // Validate required Discord context

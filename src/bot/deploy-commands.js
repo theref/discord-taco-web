@@ -49,6 +49,19 @@ const commands = [
           },
         ],
       },
+      {
+        name: "balance",
+        description: "Check ETH and USDC balance",
+        type: ApplicationCommandOptionType.Subcommand,
+        options: [
+          {
+            name: "user",
+            description: "User to check balance for (defaults to yourself)",
+            type: ApplicationCommandOptionType.User,
+            required: false,
+          },
+        ],
+      },
     ],
   },
 ];

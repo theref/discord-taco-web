@@ -214,6 +214,65 @@ function createServer() {
         console.log(`   ✓ Account age OK: ${ageCheck.ageDays} days`);
       }
 
+      // Handle /taco balance subcommand
+      const subcommand = parsed?.data?.options?.[0]?.name;
+      if (subcommand === "balance") {
+        const balanceOptions = parsed?.data?.options?.[0]?.options || [];
+        const targetUserOpt = balanceOptions.find(
+          (o) => o?.name === "user",
+        )?.value;
+        const targetUserId = targetUserOpt || senderUserId;
+
+        console.log(`   Balance check for user: ${targetUserId}`);
+
+        res.writeHead(200, { "content-type": "application/json" });
+        res.end(JSON.stringify({ type: 5 }));
+
+        startDemo(
+          { MODE: "balance", DISCORD_USER_ID: targetUserId },
+          async ({ code, stdout }) => {
+            let message;
+            const balanceMatch = stdout.match(/BALANCE:(\{.*\})/);
+
+            if (code === 0 && balanceMatch) {
+              try {
+                const data = JSON.parse(balanceMatch[1]);
+                const shortenAddr = (addr) =>
+                  `${addr.slice(0, 10)}...${addr.slice(-8)}`;
+                message =
+                  `**Wallet Balance**\n` +
+                  `> **User:** <@${data.discordUserId}>\n` +
+                  `> **Address:** \`${shortenAddr(data.aaAddress)}\`\n` +
+                  `> **ETH:** ${data.eth}\n` +
+                  `> **USDC:** ${data.usdc}\n\n` +
+                  `<https://sepolia.basescan.org/address/${data.aaAddress}>`;
+              } catch {
+                message = "Failed to parse balance response.";
+              }
+            } else {
+              const errorMatch = stdout.match(/BALANCE_ERROR:(\{.*\})/);
+              let error = "Unknown error";
+              if (errorMatch) {
+                try {
+                  error = JSON.parse(errorMatch[1]).error || error;
+                } catch {}
+              }
+              message = `**Balance Check Failed**\n> ${error}`;
+            }
+
+            if (applicationId && interactionToken) {
+              try {
+                await sendFollowup(applicationId, interactionToken, message);
+                console.log("   ✓ Balance follow-up sent");
+              } catch (err) {
+                console.error("   ✗ Balance follow-up failed:", err.message);
+              }
+            }
+          },
+        );
+        return;
+      }
+
       // Extract tip parameters from Discord payload (nested execute subcommand)
       let amount = process.env.TIP_AMOUNT_ETH || "0.0001";
       let recipientUserId = "";
