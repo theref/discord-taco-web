@@ -35,11 +35,23 @@
         "conditionType": "sequential",
         "conditionVariables": [
           {
-            "varName": "senderAccountCreatedAt",
+            "varName": "senderId",
             "condition": {
               "conditionType": "json",
               "data": ":discordPayload",
               "query": "$.member.user.id",
+              "returnValueTest": {
+                "comparator": ">",
+                "value": 0
+              }
+            }
+          },
+          {
+            "varName": "senderAccountCreatedAt",
+            "condition": {
+              "conditionType": "json",
+              "data": ":senderId",
+              "query": "$",
               "returnValueTest": {
                 "comparator": ">",
                 "value": 0
@@ -97,14 +109,17 @@
             "varName": "senderSalt",
             "condition": {
               "conditionType": "json",
-              "data": ":discordPayload",
-              "query": "$.member.user.id",
+              "data": ":senderId",
+              "query": "$",
               "returnValueTest": {
                 "comparator": ">",
                 "value": 0
               }
             },
             "operations": [
+              {
+                "operation": "str"
+              },
               {
                 "operation": "+=",
                 "value": "|Discord|Collab.Land"
@@ -201,6 +216,9 @@
               }
             },
             "operations": [
+              {
+                "operation": "str"
+              },
               {
                 "operation": "+=",
                 "value": "|Discord|Collab.Land"
