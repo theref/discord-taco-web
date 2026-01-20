@@ -205,6 +205,29 @@
             ]
           },
           {
+            "varName": "amountUSDC",
+            "condition": {
+              "conditionType": "json",
+              "data": ":discordPayload",
+              "query": "$.data.options[0].options[?(@.name == \"amount\")].value",
+              "returnValueTest": {
+                "comparator": ">=",
+                "value": 0.0001,
+                "operations": [
+                  {
+                    "operation": "float"
+                  }
+                ]
+              }
+            },
+            "operations": [
+              {
+                "operation": "toTokenBaseUnits",
+                "value": 6
+              }
+            ]
+          },
+          {
             "varName": "recipientSalt",
             "condition": {
               "conditionType": "json",
@@ -272,31 +295,88 @@
           {
             "varName": "validateCalldata",
             "condition": {
-              "signingObjectContextVar": ":signingConditionObject",
-              "attributeName": "call_data",
-              "conditionType": "signing-abi-attribute",
-              "abiValidation": {
-                "allowedAbiCalls": {
-                  "execute((address,uint256,bytes))": [
-                    {
-                      "parameterIndex": 0,
-                      "returnValueTest": {
-                        "comparator": "==",
-                        "value": ":recipientAA",
-                        "operations": [{ "operation": "index", "value": 0 }]
-                      }
-                    },
-                    {
-                      "parameterIndex": 0,
-                      "returnValueTest": {
-                        "comparator": "==",
-                        "value": ":amountDiscord",
-                        "operations": [{ "operation": "index", "value": 1 }]
-                      }
+              "conditionType": "compound",
+              "operator": "or",
+              "operands": [
+                {
+                  "signingObjectContextVar": ":signingConditionObject",
+                  "attributeName": "call_data",
+                  "conditionType": "signing-abi-attribute",
+                  "abiValidation": {
+                    "allowedAbiCalls": {
+                      "execute((address,uint256,bytes))": [
+                        {
+                          "parameterIndex": 0,
+                          "returnValueTest": {
+                            "comparator": "==",
+                            "value": ":recipientAA",
+                            "operations": [{ "operation": "index", "value": 0 }]
+                          }
+                        },
+                        {
+                          "parameterIndex": 0,
+                          "returnValueTest": {
+                            "comparator": "==",
+                            "value": ":amountDiscord",
+                            "operations": [{ "operation": "index", "value": 1 }]
+                          }
+                        }
+                      ]
                     }
-                  ]
+                  }
+                },
+                {
+                  "signingObjectContextVar": ":signingConditionObject",
+                  "attributeName": "call_data",
+                  "conditionType": "signing-abi-attribute",
+                  "abiValidation": {
+                    "allowedAbiCalls": {
+                      "execute((address,uint256,bytes))": [
+                        {
+                          "parameterIndex": 0,
+                          "returnValueTest": {
+                            "comparator": "==",
+                            "value": "0x036CbD53842c5426634e7929541eC2318f3dCF7e",
+                            "operations": [{ "operation": "index", "value": 0 }]
+                          }
+                        },
+                        {
+                          "parameterIndex": 0,
+                          "returnValueTest": {
+                            "comparator": "==",
+                            "value": 0,
+                            "operations": [{ "operation": "index", "value": 1 }]
+                          }
+                        },
+                        {
+                          "parameterIndex": 0,
+                          "indexWithinTuple": 2,
+                          "nestedAbiValidation": {
+                            "allowedAbiCalls": {
+                              "transfer(address,uint256)": [
+                                {
+                                  "parameterIndex": 0,
+                                  "returnValueTest": {
+                                    "comparator": "==",
+                                    "value": ":recipientAA"
+                                  }
+                                },
+                                {
+                                  "parameterIndex": 1,
+                                  "returnValueTest": {
+                                    "comparator": "==",
+                                    "value": ":amountUSDC"
+                                  }
+                                }
+                              ]
+                            }
+                          }
+                        }
+                      ]
+                    }
+                  }
                 }
-              }
+              ]
             }
           }
         ]
