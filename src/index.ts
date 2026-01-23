@@ -409,6 +409,23 @@ async function signUserOpWithTaco(
   console.log("  :signature =", discordContext.signature);
   console.log("  :discordPayload =", discordContext.payload);
 
+  // Log request payload size
+  const requestPayload = {
+    userOp,
+    contextParameters: (signingContext as any).customContextParameters,
+  };
+  const payloadJson = JSON.stringify(requestPayload, (_, value) =>
+    typeof value === "bigint" ? value.toString() : value,
+  );
+  const payloadBytes = Buffer.byteLength(payloadJson, "utf8");
+  const payloadSizeFormatted =
+    payloadBytes >= 1024 * 1024
+      ? `${(payloadBytes / (1024 * 1024)).toFixed(2)} MB`
+      : payloadBytes >= 1024
+        ? `${(payloadBytes / 1024).toFixed(2)} KB`
+        : `${payloadBytes} bytes`;
+  console.log(`[TACo] Request payload size: ${payloadSizeFormatted}`);
+
   console.log("[TACo] Calling signUserOp...");
   const startTime = Date.now();
   try {
@@ -422,6 +439,20 @@ async function signUserOpWithTaco(
       signingContext,
     );
     const signingTimeMs = Date.now() - startTime;
+
+    // Log response payload size
+    const responseJson = JSON.stringify(result, (_, value) =>
+      typeof value === "bigint" ? value.toString() : value,
+    );
+    const responseBytes = Buffer.byteLength(responseJson, "utf8");
+    const responseSizeFormatted =
+      responseBytes >= 1024 * 1024
+        ? `${(responseBytes / (1024 * 1024)).toFixed(2)} MB`
+        : responseBytes >= 1024
+          ? `${(responseBytes / 1024).toFixed(2)} KB`
+          : `${responseBytes} bytes`;
+    console.log(`[TACo] Response payload size: ${responseSizeFormatted}`);
+
     console.log(`[TACo] signUserOp succeeded in ${signingTimeMs}ms`);
     console.log(`TACO_SIGNING_TIME_MS:${signingTimeMs}`);
     return { ...result, signingTimeMs };
