@@ -493,6 +493,7 @@ function loadConfig(cliOptions: CLIOptions): {
   rates: number[];
   burstSizes: number[];
   batchesPerBurst: number;
+  cooldown: number;
   output?: string;
 } {
   if (!cliOptions.config) {
@@ -523,6 +524,7 @@ function loadConfig(cliOptions: CLIOptions): {
   const rates = cliOptions.rates || configDefaults.rates || [0.5, 1, 3, 5, 10];
   const burstSizes = configDefaults.burstSizes || [1, 3, 5, 10];
   const batchesPerBurst = configDefaults.batchesPerBurst || 10;
+  const cooldown = configDefaults.cooldown ?? 30;
 
   return {
     config,
@@ -533,6 +535,7 @@ function loadConfig(cliOptions: CLIOptions): {
     rates,
     burstSizes,
     batchesPerBurst,
+    cooldown,
     output: cliOptions.output,
   };
 }
@@ -1861,6 +1864,7 @@ Examples:
     rates,
     burstSizes,
     batchesPerBurst,
+    cooldown,
     output,
   } = loadConfig(cliOptions);
 
@@ -1899,14 +1903,18 @@ Examples:
       steadyResults.push(printResults(results, "steady", testRate));
 
       if (testRate !== rates[rates.length - 1]) {
-        console.log("\n[stress-test] Cooling down 30s before next rate...\n");
-        await sleep(30000);
+        console.log(
+          `\n[stress-test] Cooling down ${cooldown}s before next rate...\n`,
+        );
+        await sleep(cooldown * 1000);
       }
     }
 
     // Cooldown between steady and burst sections
-    console.log("\n[stress-test] Cooling down 30s before burst tests...\n");
-    await sleep(30000);
+    console.log(
+      `\n[stress-test] Cooling down ${cooldown}s before burst tests...\n`,
+    );
+    await sleep(cooldown * 1000);
 
     // Then run all burst tests
     console.log("\n\n" + "=".repeat(60));
@@ -1926,9 +1934,9 @@ Examples:
 
       if (burstSize !== burstSizes[burstSizes.length - 1]) {
         console.log(
-          "\n[stress-test] Cooling down 30s before next burst size...\n",
+          `\n[stress-test] Cooling down ${cooldown}s before next burst size...\n`,
         );
-        await sleep(30000);
+        await sleep(cooldown * 1000);
       }
     }
 

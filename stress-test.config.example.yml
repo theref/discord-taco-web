@@ -24,6 +24,9 @@ defaults:
   # Number of batches to run for each burst size
   batchesPerBurst: 3
 
+  # Cooldown between test sections (seconds)
+  cooldown: 30
+
   # Default rate/burst size for single-mode runs
   rate: 1
 
