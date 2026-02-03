@@ -181,14 +181,18 @@ interface Payload {
   bodyJson?: string;
 }
 
+interface ConfigDefaults {
+  mode?: "steady" | "burst" | "sweep";
+  duration?: number;
+  rates?: number[];
+  rate?: number;
+  requests?: number;
+  burstSizes?: number[];
+  batchesPerBurst?: number;
+}
+
 interface Config {
-  defaults: {
-    mode: "steady" | "burst" | "sweep";
-    duration: number;
-    rates: number[];
-    rate: number;
-    requests?: number;
-  };
+  defaults?: ConfigDefaults;
   payloads: Payload[];
 }
 
@@ -224,8 +228,9 @@ interface Stats {
 
 interface RunResult {
   mode: "steady" | "burst";
+  // For steady mode: target requests per second
+  // For burst mode: burst size (concurrent requests per batch)
   targetRate: number;
-  actualRate: number;
   duration: number;
   requests: {
     total: number;
@@ -412,6 +417,8 @@ function loadConfig(cliOptions: CLIOptions): {
   duration: number;
   requests?: number;
   rates: number[];
+  burstSizes: number[];
+  batchesPerBurst: number;
   output?: string;
 } {
   if (!cliOptions.config) {
@@ -433,20 +440,25 @@ function loadConfig(cliOptions: CLIOptions): {
     process.exit(1);
   }
 
-  const defaults = config.defaults || {
-    mode: "steady",
-    duration: 60,
-    rates: [0.5, 1, 3, 5, 10],
-    rate: 1,
-  };
+  const configDefaults = config.defaults || {};
+
+  const mode = cliOptions.mode || configDefaults.mode || "steady";
+  const rate = cliOptions.rate ?? configDefaults.rate ?? 1;
+  const duration = cliOptions.duration ?? configDefaults.duration ?? 60;
+  const requests = cliOptions.requests ?? configDefaults.requests;
+  const rates = cliOptions.rates || configDefaults.rates || [0.5, 1, 3, 5, 10];
+  const burstSizes = configDefaults.burstSizes || [1, 3, 5, 10];
+  const batchesPerBurst = configDefaults.batchesPerBurst || 10;
 
   return {
     config,
-    mode: cliOptions.mode || defaults.mode || "steady",
-    rate: cliOptions.rate ?? defaults.rate ?? 1,
-    duration: cliOptions.duration ?? defaults.duration ?? 60,
-    requests: cliOptions.requests ?? defaults.requests,
-    rates: cliOptions.rates || defaults.rates || [0.5, 1, 3, 5, 10],
+    mode: mode as "steady" | "burst" | "sweep",
+    rate,
+    duration,
+    requests,
+    rates,
+    burstSizes,
+    batchesPerBurst,
     output: cliOptions.output,
   };
 }
@@ -495,12 +507,53 @@ async function initializeClients(): Promise<void> {
 // Request Executor
 // =============================================================================
 
+const REQUEST_TIMEOUT_MS = 60_000; // 60 second timeout per request
+
+async function withTimeout<T>(
+  promise: Promise<T>,
+  timeoutMs: number,
+  errorMessage: string,
+): Promise<T> {
+  let timeoutId: NodeJS.Timeout;
+  const timeoutPromise = new Promise<never>((_, reject) => {
+    timeoutId = setTimeout(() => reject(new Error(errorMessage)), timeoutMs);
+  });
+  return Promise.race([promise, timeoutPromise]).finally(() =>
+    clearTimeout(timeoutId),
+  );
+}
+
 async function executeSigningRequest(payload: Payload): Promise<RequestResult> {
   const startTime = Date.now();
+
+  // Wrap the entire execution in a timeout
+  return withTimeout(
+    executeSigningRequestInner(payload, startTime),
+    REQUEST_TIMEOUT_MS,
+    `Request timed out after ${REQUEST_TIMEOUT_MS / 1000}s`,
+  ).catch((error) => {
+    const errorMessage = error instanceof Error ? error.message : String(error);
+    return {
+      success: false,
+      duration: Date.now() - startTime,
+      startTime,
+      endTime: Date.now(),
+      error: `[timeout] ${errorMessage}`,
+      index: 0,
+    };
+  });
+}
+
+async function executeSigningRequestInner(
+  payload: Payload,
+  startTime: number,
+): Promise<RequestResult> {
   let tacoSigningTimeMs: number | undefined;
+  let phase = "init";
 
   try {
     // Parse body
+    phase = "parse-payload";
     const body = payload.bodyJson ? JSON.parse(payload.bodyJson) : payload.body;
     if (!body) {
       throw new Error("Payload must have either 'body' or 'bodyJson'");
@@ -520,7 +573,8 @@ async function executeSigningRequest(payload: Payload): Promise<RequestResult> {
     const tokenOpt = opts.find((o: any) => o?.name === "token")?.value;
     const tokenType = String(tokenOpt ?? "ETH").toUpperCase();
 
-    // Create smart account for sender (reusing main module function)
+    // Create smart account for sender
+    phase = "create-smart-account";
     const senderSalt = ethers.utils.keccak256(
       ethers.utils.toUtf8Bytes(`${senderDiscordId}|Discord|Collab.Land`),
     ) as `0x${string}`;
@@ -532,7 +586,8 @@ async function executeSigningRequest(payload: Payload): Promise<RequestResult> {
       senderSalt,
     );
 
-    // Derive recipient address (reusing main module function)
+    // Derive recipient address
+    phase = "derive-recipient";
     const recipientAA = await deriveDiscordUserAA(
       publicClient,
       signingCoordinatorProvider,
@@ -541,6 +596,7 @@ async function executeSigningRequest(payload: Payload): Promise<RequestResult> {
     );
 
     // Parse amount
+    phase = "build-userop";
     const amountStr = String(amountOpt ?? "0.0001");
     const tokenDecimals = tokenType === "USDC" ? 6 : 18;
     const transferAmount = ethers.utils.parseUnits(amountStr, tokenDecimals);
@@ -568,6 +624,7 @@ async function executeSigningRequest(payload: Payload): Promise<RequestResult> {
           ];
 
     // Prepare UserOp using bundler
+    phase = "prepare-userop";
     const userOp = await bundlerClient.prepareUserOperation({
       account: smartAccount,
       calls,
@@ -584,7 +641,8 @@ async function executeSigningRequest(payload: Payload): Promise<RequestResult> {
       payload: bodyString,
     };
 
-    // Sign with TACo (reusing main module function)
+    // Sign with TACo
+    phase = "taco-signing";
     const tacoStartTime = Date.now();
     await signUserOpWithTaco(
       userOp,
@@ -611,7 +669,7 @@ async function executeSigningRequest(payload: Payload): Promise<RequestResult> {
       endTime,
       duration: endTime - startTime,
       success: false,
-      error: errorMessage,
+      error: `[${phase}] ${errorMessage}`,
       tacoSigningTimeMs,
     };
   }
@@ -727,29 +785,23 @@ async function runSteadyMode(
 
 async function runBurstMode(
   payloads: Payload[],
-  rate: number,
-  duration: number,
-  requestCount?: number,
+  burstSize: number,
+  totalBatches: number,
 ): Promise<RequestResult[]> {
   const results: RequestResult[] = [];
-  const batchSize = Math.ceil(rate);
-  const totalBatches = requestCount
-    ? Math.ceil(requestCount / batchSize)
-    : Math.floor(duration);
-  const totalRequests = requestCount ?? totalBatches * batchSize;
+  const totalRequests = totalBatches * burstSize;
   let payloadIndex = 0;
   let requestIndex = 0;
 
   console.log(
-    `[stress-test] Starting burst mode: ${batchSize} concurrent, ${totalBatches} batches`,
+    `[stress-test] Starting burst mode: size=${burstSize}, batches=${totalBatches}`,
   );
 
   const startTime = Date.now();
 
   for (let batch = 0; batch < totalBatches; batch++) {
-    const batchStartTime = Date.now();
     const batchPromises: Promise<RequestResult>[] = [];
-    const currentBatchSize = Math.min(batchSize, totalRequests - requestIndex);
+    const currentBatchSize = Math.min(burstSize, totalRequests - requestIndex);
 
     for (let i = 0; i < currentBatchSize; i++) {
       const payload = payloads[payloadIndex % payloads.length];
@@ -760,6 +812,7 @@ async function runBurstMode(
       );
     }
 
+    // Wait for ALL requests in this batch to complete before next batch
     const batchResults = await Promise.all(batchPromises);
     results.push(...batchResults);
 
@@ -781,15 +834,6 @@ async function runBurstMode(
         `${successCount} ok, ${results.length - successCount} fail | ` +
         `avg: ${(avgDuration / 1000).toFixed(2)}s | taco: ${(avgTaco / 1000).toFixed(2)}s`,
     );
-
-    // Wait between batches
-    if (batch < totalBatches - 1) {
-      const batchDuration = Date.now() - batchStartTime;
-      const waitTime = Math.max(0, 1000 - batchDuration);
-      if (waitTime > 0) {
-        await sleep(waitTime);
-      }
-    }
   }
 
   return results;
@@ -820,7 +864,6 @@ function printResults(
     (results[results.length - 1].endTime - results[0].startTime) / 1000;
   const successResults = results.filter((r) => r.success);
   const failedResults = results.filter((r) => !r.success);
-  const actualRate = results.length / totalDuration;
 
   const latencies = results.map((r) => r.duration);
   const latencyStats = calculateStats(latencies);
@@ -837,13 +880,13 @@ function printResults(
   console.log("                    STRESS TEST RESULTS");
   console.log("=".repeat(60));
   console.log();
+  const modeLabel =
+    mode === "burst" ? `Burst size: ${rate}` : `Rate: ${rate} RPS`;
   console.log(
-    `Mode: ${mode} | Rate: ${rate} RPS | Duration: ${totalDuration.toFixed(1)}s`,
+    `Mode: ${mode} | ${modeLabel} | Duration: ${totalDuration.toFixed(1)}s`,
   );
   console.log();
-  console.log("THROUGHPUT");
-  console.log(`    Target RPS:  ${rate.toFixed(2)}`);
-  console.log(`    Actual RPS:  ${actualRate.toFixed(2)}`);
+  console.log("REQUESTS");
   console.log(`    Total:       ${results.length} requests`);
   console.log(
     `    Success:     ${successResults.length} (${((successResults.length / results.length) * 100).toFixed(1)}%)`,
@@ -880,7 +923,6 @@ function printResults(
   return {
     mode: mode as "steady" | "burst",
     targetRate: rate,
-    actualRate: Math.round(actualRate * 100) / 100,
     duration: Math.round(totalDuration * 10) / 10,
     requests: {
       total: results.length,
@@ -910,22 +952,36 @@ Usage:
 Options:
   --config=<file>     Config file with payloads and defaults (required)
   --mode=<mode>       steady, burst, or sweep (default: steady)
-  --rate=<n>          Requests per second (default: 1)
-  --duration=<sec>    Duration per rate level (default: 60)
+  --rate=<n>          Requests per second for steady / burst size for burst (default: 1)
+  --duration=<sec>    Duration per rate level for steady mode (default: 60)
   --requests=<n>      Fixed request count (overrides duration)
-  --rates=<list>      Comma-separated rates for sweep mode
-  --output=<file>     Save JSON report to file
+  --rates=<list>      Comma-separated rates for sweep mode steady tests
+  --output=<file>     Save report to file (.html for interactive report, .json for data)
+
+Modes:
+  steady    Fire requests at a fixed rate (e.g., 1 RPS = 1 request every 1s)
+  burst     Fire N requests simultaneously, wait for all to complete, repeat
+  sweep     Run all steady rate tests, then all burst size tests (recommended)
 
 Examples:
-  npx tsx scripts/stress-test.ts --config=stress-test.config.yml
-  npx tsx scripts/stress-test.ts --config=stress-test.config.yml --mode=sweep
-  npx tsx scripts/stress-test.ts --config=stress-test.config.yml --rate=5 --duration=120
+  npx tsx scripts/stress-test.ts --config=stress-test.config.yml --mode=sweep --output=report.html
+  npx tsx scripts/stress-test.ts --config=stress-test.config.yml --mode=steady --rate=5 --duration=120
+  npx tsx scripts/stress-test.ts --config=stress-test.config.yml --mode=burst --rate=10
 `);
     process.exit(1);
   }
 
-  const { config, mode, rate, duration, requests, rates, output } =
-    loadConfig(cliOptions);
+  const {
+    config,
+    mode,
+    rate,
+    duration,
+    requests,
+    rates,
+    burstSizes,
+    batchesPerBurst,
+    output,
+  } = loadConfig(cliOptions);
 
   console.log("[stress-test] TACo Stress Test Tool");
   console.log(`[stress-test] Config: ${cliOptions.config}`);
@@ -934,45 +990,57 @@ Examples:
 
   await initializeClients();
 
-  const allResults: RunResult[] = [];
+  const steadyResults: RunResult[] = [];
+  const burstResults: RunResult[] = [];
 
   if (mode === "sweep") {
-    console.log(
-      `\n[stress-test] Starting sweep mode with rates: ${rates.join(", ")}`,
-    );
-    console.log(`[stress-test] Duration per rate: ${duration}s`);
-    console.log(`[stress-test] Modes: steady, burst\n`);
+    console.log(`\n[stress-test] Starting sweep mode`);
+    console.log(`[stress-test] Steady rates: ${rates.join(", ")} RPS`);
+    console.log(`[stress-test] Burst sizes: ${burstSizes.join(", ")}`);
+    console.log(`[stress-test] Duration per steady rate: ${duration}s`);
+    console.log(`[stress-test] Batches per burst size: ${batchesPerBurst}\n`);
+
+    // Run all steady rate tests first
+    console.log("\n" + "=".repeat(60));
+    console.log("              STEADY RATE TESTS");
+    console.log("=".repeat(60));
 
     for (const testRate of rates) {
-      // Steady mode
-      console.log(`\n${"=".repeat(60)}`);
-      console.log(`SWEEP: steady @ ${testRate} RPS`);
-      console.log("=".repeat(60));
-      const steadyResults = await runSteadyMode(
+      console.log(`\n${"─".repeat(60)}`);
+      console.log(`Steady @ ${testRate} RPS`);
+      console.log("─".repeat(60));
+      const results = await runSteadyMode(
         config.payloads,
         testRate,
         duration,
         requests,
       );
-      allResults.push(printResults(steadyResults, "steady", testRate));
-
-      console.log("\n[stress-test] Pausing 5s before next test...\n");
-      await sleep(5000);
-
-      // Burst mode
-      console.log(`\n${"=".repeat(60)}`);
-      console.log(`SWEEP: burst @ ${testRate} RPS`);
-      console.log("=".repeat(60));
-      const burstResults = await runBurstMode(
-        config.payloads,
-        testRate,
-        duration,
-        requests,
-      );
-      allResults.push(printResults(burstResults, "burst", testRate));
+      steadyResults.push(printResults(results, "steady", testRate));
 
       if (testRate !== rates[rates.length - 1]) {
-        console.log("\n[stress-test] Pausing 10s before next rate level...\n");
+        console.log("\n[stress-test] Pausing 10s before next rate...\n");
+        await sleep(10000);
+      }
+    }
+
+    // Then run all burst tests
+    console.log("\n\n" + "=".repeat(60));
+    console.log("              BURST SIZE TESTS");
+    console.log("=".repeat(60));
+
+    for (const burstSize of burstSizes) {
+      console.log(`\n${"─".repeat(60)}`);
+      console.log(`Burst size ${burstSize} (${batchesPerBurst} batches)`);
+      console.log("─".repeat(60));
+      const results = await runBurstMode(
+        config.payloads,
+        burstSize,
+        batchesPerBurst,
+      );
+      burstResults.push(printResults(results, "burst", burstSize));
+
+      if (burstSize !== burstSizes[burstSizes.length - 1]) {
+        console.log("\n[stress-test] Pausing 10s before next burst size...\n");
         await sleep(10000);
       }
     }
@@ -981,32 +1049,58 @@ Examples:
     console.log("\n\n" + "=".repeat(60));
     console.log("                    SWEEP SUMMARY");
     console.log("=".repeat(60));
-    console.log();
-    console.log(
-      "Rate (RPS) | Mode   | Actual RPS | Success % | Latency p50 | TACo p50",
-    );
-    console.log("-".repeat(75));
-    for (const r of allResults) {
+
+    console.log("\nSteady Rate Results:");
+    console.log("Rate (RPS) | Requests | Success % | Latency p50 | TACo p50");
+    console.log("-".repeat(65));
+    for (const r of steadyResults) {
       const successPct = (
         (r.requests.success / r.requests.total) *
         100
       ).toFixed(1);
       const tacoP50 = r.tacoSigningTime ? `${r.tacoSigningTime.p50}ms` : "N/A";
       console.log(
-        `${r.targetRate.toString().padStart(10)} | ${r.mode.padEnd(6)} | ` +
-          `${r.actualRate.toFixed(2).padStart(10)} | ${successPct.padStart(9)}% | ` +
+        `${r.targetRate.toString().padStart(10)} | ` +
+          `${r.requests.total.toString().padStart(8)} | ${successPct.padStart(9)}% | ` +
+          `${(r.latency.p50 + "ms").padStart(11)} | ${tacoP50.padStart(8)}`,
+      );
+    }
+
+    console.log("\nBurst Size Results:");
+    console.log("Burst Size | Total Reqs | Success % | Latency p50 | TACo p50");
+    console.log("-".repeat(65));
+    for (const r of burstResults) {
+      const successPct = (
+        (r.requests.success / r.requests.total) *
+        100
+      ).toFixed(1);
+      const tacoP50 = r.tacoSigningTime ? `${r.tacoSigningTime.p50}ms` : "N/A";
+      console.log(
+        `${r.targetRate.toString().padStart(10)} | ` +
+          `${r.requests.total.toString().padStart(10)} | ${successPct.padStart(9)}% | ` +
           `${(r.latency.p50 + "ms").padStart(11)} | ${tacoP50.padStart(8)}`,
       );
     }
     console.log();
+  } else if (mode === "burst") {
+    const burstSize = rate; // Use rate as burst size for single burst mode
+    const results = await runBurstMode(
+      config.payloads,
+      burstSize,
+      batchesPerBurst,
+    );
+    burstResults.push(printResults(results, "burst", burstSize));
   } else {
-    const results =
-      mode === "burst"
-        ? await runBurstMode(config.payloads, rate, duration, requests)
-        : await runSteadyMode(config.payloads, rate, duration, requests);
-
-    allResults.push(printResults(results, mode, rate));
+    const results = await runSteadyMode(
+      config.payloads,
+      rate,
+      duration,
+      requests,
+    );
+    steadyResults.push(printResults(results, "steady", rate));
   }
+
+  const allResults = [...steadyResults, ...burstResults];
 
   // Save report
   if (output) {
@@ -1018,126 +1112,595 @@ Examples:
       // JSON report
       const report = {
         timestamp: new Date().toISOString(),
-        config: { mode, rate, duration, rates },
-        results: allResults,
+        config: { mode, rate, duration, rates, burstSizes, batchesPerBurst },
+        steadyResults,
+        burstResults,
         summary: { totalRequests, totalSuccess, overallSuccessRate },
       };
       fs.writeFileSync(output, JSON.stringify(report, null, 2));
     } else {
-      // Markdown report
-      const lines: string[] = [];
-      lines.push("# TACo Stress Test Report");
-      lines.push("");
-      lines.push(`**Generated:** ${new Date().toISOString()}`);
-      lines.push("");
-      lines.push("## Configuration");
-      lines.push("");
-      lines.push(`- **Mode:** ${mode}`);
-      lines.push(`- **Duration per rate:** ${duration}s`);
-      if (mode === "sweep") {
-        lines.push(`- **Rates tested:** ${rates.join(", ")} RPS`);
-      } else {
-        lines.push(`- **Rate:** ${rate} RPS`);
-      }
-      lines.push("");
-      lines.push("## Summary");
-      lines.push("");
-      lines.push(`| Metric | Value |`);
-      lines.push(`|--------|-------|`);
-      lines.push(`| Total Requests | ${totalRequests} |`);
-      lines.push(
-        `| Successful | ${totalSuccess} (${overallSuccessRate.toFixed(1)}%) |`,
-      );
-      lines.push(
-        `| Failed | ${totalRequests - totalSuccess} (${(100 - overallSuccessRate).toFixed(1)}%) |`,
-      );
-      lines.push("");
-      lines.push("## Results by Rate");
-      lines.push("");
-      lines.push(
-        "| Rate (RPS) | Mode | Actual RPS | Success % | Latency p50 | Latency p95 | TACo p50 | TACo p95 |",
-      );
-      lines.push(
-        "|------------|------|------------|-----------|-------------|-------------|----------|----------|",
-      );
+      // HTML report with Chart.js
+      const formatDuration = (ms: number): string => {
+        if (ms < 1000) return `${ms}ms`;
+        if (ms < 60000) return `${(ms / 1000).toFixed(1)}s`;
+        const mins = Math.floor(ms / 60000);
+        const secs = ((ms % 60000) / 1000).toFixed(0);
+        return `${mins}m ${secs}s`;
+      };
 
-      for (const r of allResults) {
-        const successPct = (
-          (r.requests.success / r.requests.total) *
-          100
-        ).toFixed(1);
-        const tacoP50 = r.tacoSigningTime
-          ? `${r.tacoSigningTime.p50}ms`
-          : "N/A";
-        const tacoP95 = r.tacoSigningTime
-          ? `${r.tacoSigningTime.p95}ms`
-          : "N/A";
-        lines.push(
-          `| ${r.targetRate} | ${r.mode} | ${r.actualRate.toFixed(2)} | ${successPct}% | ${r.latency.p50}ms | ${r.latency.p95}ms | ${tacoP50} | ${tacoP95} |`,
-        );
-      }
-
-      lines.push("");
-      lines.push("## Detailed Results");
-
-      for (const r of allResults) {
-        lines.push("");
-        lines.push(`### ${r.mode} @ ${r.targetRate} RPS`);
-        lines.push("");
-        lines.push("**Throughput**");
-        lines.push("");
-        lines.push(`| Metric | Value |`);
-        lines.push(`|--------|-------|`);
-        lines.push(`| Target RPS | ${r.targetRate} |`);
-        lines.push(`| Actual RPS | ${r.actualRate.toFixed(2)} |`);
-        lines.push(`| Duration | ${r.duration}s |`);
-        lines.push(`| Total Requests | ${r.requests.total} |`);
-        lines.push(
-          `| Successful | ${r.requests.success} (${((r.requests.success / r.requests.total) * 100).toFixed(1)}%) |`,
-        );
-        lines.push(`| Failed | ${r.requests.failed} |`);
-        lines.push("");
-        lines.push("**Latency (ms)**");
-        lines.push("");
-        lines.push(`| Metric | Value |`);
-        lines.push(`|--------|-------|`);
-        lines.push(`| Min | ${r.latency.min} |`);
-        lines.push(`| Max | ${r.latency.max} |`);
-        lines.push(`| Mean | ${r.latency.mean} |`);
-        lines.push(`| p50 | ${r.latency.p50} |`);
-        lines.push(`| p95 | ${r.latency.p95} |`);
-        lines.push(`| p99 | ${r.latency.p99} |`);
-
-        if (r.tacoSigningTime) {
-          lines.push("");
-          lines.push("**TACo Signing Time (ms)**");
-          lines.push("");
-          lines.push(`| Metric | Value |`);
-          lines.push(`|--------|-------|`);
-          lines.push(`| Min | ${r.tacoSigningTime.min} |`);
-          lines.push(`| Max | ${r.tacoSigningTime.max} |`);
-          lines.push(`| Mean | ${r.tacoSigningTime.mean} |`);
-          lines.push(`| p50 | ${r.tacoSigningTime.p50} |`);
-          lines.push(`| p95 | ${r.tacoSigningTime.p95} |`);
-          lines.push(`| p99 | ${r.tacoSigningTime.p99} |`);
-        }
-
+      // Collect all errors for the error section
+      const allErrors: Array<{ source: string; errors: string[] }> = [];
+      for (const r of steadyResults) {
         if (r.errors.length > 0) {
-          lines.push("");
-          lines.push("**Errors**");
-          lines.push("");
-          for (const err of r.errors.slice(0, 5)) {
-            const shortErr = err.length > 80 ? err.slice(0, 80) + "..." : err;
-            lines.push(`- ${shortErr}`);
-          }
-          if (r.errors.length > 5) {
-            lines.push(`- ... and ${r.errors.length - 5} more`);
-          }
+          allErrors.push({
+            source: `Steady @ ${r.targetRate} RPS`,
+            errors: r.errors,
+          });
+        }
+      }
+      for (const r of burstResults) {
+        if (r.errors.length > 0) {
+          allErrors.push({
+            source: `Burst size ${r.targetRate}`,
+            errors: r.errors,
+          });
         }
       }
 
-      lines.push("");
-      fs.writeFileSync(output, lines.join("\n"));
+      // Group and count errors
+      const groupErrors = (
+        errors: string[],
+      ): Map<string, { count: number; full: string }> => {
+        const errorCounts = new Map<string, { count: number; full: string }>();
+        for (const err of errors) {
+          let errorType: string;
+          if (err.includes("Threshold of signatures not met")) {
+            errorType = "Threshold of signatures not met";
+          } else if (
+            err.includes("NETWORK_ERROR") ||
+            err.includes("could not detect network")
+          ) {
+            errorType = "Network error (RPC overload)";
+          } else if (err.includes("missing revert data")) {
+            errorType = "Contract revert (missing revert data)";
+          } else if (err.includes("timeout")) {
+            errorType = "Request timeout";
+          } else {
+            // Extract phase from error if present
+            const phaseMatch = err.match(/^\[([^\]]+)\]/);
+            errorType = phaseMatch
+              ? `[${phaseMatch[1]}] error`
+              : err.slice(0, 60);
+          }
+
+          const existing = errorCounts.get(errorType);
+          if (existing) {
+            existing.count++;
+          } else {
+            errorCounts.set(errorType, { count: 1, full: err });
+          }
+        }
+        return errorCounts;
+      };
+
+      const html = `<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>TACo Stress Test Report</title>
+  <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+  <style>
+    :root {
+      --bg: #1a1a2e;
+      --card-bg: #16213e;
+      --text: #eee;
+      --text-muted: #888;
+      --accent: #4fc3f7;
+      --success: #66bb6a;
+      --warning: #ffa726;
+      --error: #ef5350;
+      --border: #333;
+    }
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+      background: var(--bg);
+      color: var(--text);
+      line-height: 1.6;
+      padding: 2rem;
+    }
+    .container { max-width: 1400px; margin: 0 auto; }
+    h1 { font-size: 2rem; margin-bottom: 0.5rem; }
+    h2 { font-size: 1.5rem; margin: 2rem 0 1rem; color: var(--accent); border-bottom: 1px solid var(--border); padding-bottom: 0.5rem; }
+    h3 { font-size: 1.2rem; margin: 1.5rem 0 0.75rem; }
+    .timestamp { color: var(--text-muted); margin-bottom: 2rem; }
+    .summary-grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+      gap: 1rem;
+      margin-bottom: 2rem;
+    }
+    .summary-card {
+      background: var(--card-bg);
+      border-radius: 8px;
+      padding: 1.5rem;
+      text-align: center;
+    }
+    .summary-card .value {
+      font-size: 2rem;
+      font-weight: bold;
+      color: var(--accent);
+    }
+    .summary-card .label { color: var(--text-muted); font-size: 0.9rem; }
+    .summary-card.success .value { color: var(--success); }
+    .summary-card.warning .value { color: var(--warning); }
+    .summary-card.error .value { color: var(--error); }
+    .chart-container {
+      background: var(--card-bg);
+      border-radius: 8px;
+      padding: 1.5rem;
+      margin-bottom: 1.5rem;
+    }
+    .chart-row {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(400px, 1fr));
+      gap: 1.5rem;
+    }
+    table {
+      width: 100%;
+      border-collapse: collapse;
+      background: var(--card-bg);
+      border-radius: 8px;
+      overflow: hidden;
+      margin-bottom: 1.5rem;
+    }
+    th, td {
+      padding: 0.75rem 1rem;
+      text-align: left;
+      border-bottom: 1px solid var(--border);
+    }
+    th { background: rgba(79, 195, 247, 0.1); color: var(--accent); font-weight: 600; }
+    tr:last-child td { border-bottom: none; }
+    tr:hover { background: rgba(255,255,255,0.02); }
+    .error-section {
+      background: var(--card-bg);
+      border-radius: 8px;
+      padding: 1.5rem;
+      margin-bottom: 1rem;
+    }
+    .error-type {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      padding: 0.5rem 0;
+      border-bottom: 1px solid var(--border);
+    }
+    .error-type:last-child { border-bottom: none; }
+    .error-count {
+      background: var(--error);
+      color: white;
+      padding: 0.25rem 0.75rem;
+      border-radius: 12px;
+      font-size: 0.85rem;
+      font-weight: bold;
+    }
+    .error-example {
+      font-family: monospace;
+      font-size: 0.8rem;
+      color: var(--text-muted);
+      background: rgba(0,0,0,0.2);
+      padding: 0.5rem;
+      margin-top: 0.5rem;
+      border-radius: 4px;
+      word-break: break-all;
+      max-height: 100px;
+      overflow-y: auto;
+    }
+    details { margin-bottom: 0.5rem; }
+    summary { cursor: pointer; padding: 0.5rem 0; }
+    summary:hover { color: var(--accent); }
+    .glossary {
+      background: var(--card-bg);
+      border-radius: 8px;
+      padding: 1.5rem;
+      margin-top: 2rem;
+    }
+    .glossary dt { color: var(--accent); font-weight: 600; margin-top: 0.75rem; }
+    .glossary dd { color: var(--text-muted); margin-left: 1rem; }
+    .config-list { list-style: none; }
+    .config-list li { padding: 0.25rem 0; }
+    .config-list strong { color: var(--accent); }
+  </style>
+</head>
+<body>
+  <div class="container">
+    <h1>TACo Stress Test Report</h1>
+    <p class="timestamp">Generated: ${new Date().toISOString()}</p>
+
+    <div class="summary-grid">
+      <div class="summary-card">
+        <div class="value">${totalRequests}</div>
+        <div class="label">Total Requests</div>
+      </div>
+      <div class="summary-card success">
+        <div class="value">${overallSuccessRate.toFixed(1)}%</div>
+        <div class="label">Success Rate</div>
+      </div>
+      <div class="summary-card">
+        <div class="value">${totalSuccess}</div>
+        <div class="label">Successful</div>
+      </div>
+      <div class="summary-card ${totalRequests - totalSuccess > 0 ? "error" : ""}">
+        <div class="value">${totalRequests - totalSuccess}</div>
+        <div class="label">Failed</div>
+      </div>
+    </div>
+
+    <h2>Configuration</h2>
+    <ul class="config-list">
+      <li><strong>Mode:</strong> ${mode}</li>
+      <li><strong>Steady Rates:</strong> ${rates.join(", ")} RPS</li>
+      <li><strong>Duration per Rate:</strong> ${duration}s</li>
+      <li><strong>Burst Sizes:</strong> ${burstSizes.join(", ")}</li>
+      <li><strong>Batches per Burst:</strong> ${batchesPerBurst}</li>
+    </ul>
+
+    ${
+      steadyResults.length > 0
+        ? `
+    <h2>Steady Rate Tests</h2>
+    <p style="color: var(--text-muted); margin-bottom: 1rem;">
+      Tests sustained load by firing requests at fixed intervals. At higher rates, more requests will be in-flight concurrently
+      since each TACo signing takes ~10s to complete.
+    </p>
+
+    <div class="chart-row">
+      <div class="chart-container">
+        <canvas id="steadySuccessChart"></canvas>
+      </div>
+      <div class="chart-container">
+        <canvas id="steadyLatencyChart"></canvas>
+      </div>
+    </div>
+
+    <h3>Detailed Results</h3>
+    <table>
+      <thead>
+        <tr>
+          <th>Request Rate</th>
+          <th>Total Requests</th>
+          <th>Success %</th>
+          <th>Latency p50</th>
+          <th>Latency p95</th>
+          <th>TACo p50</th>
+          <th>TACo p95</th>
+        </tr>
+      </thead>
+      <tbody>
+        ${steadyResults
+          .map((r) => {
+            const successPct = (
+              (r.requests.success / r.requests.total) *
+              100
+            ).toFixed(1);
+            return `<tr>
+            <td>${r.targetRate} RPS</td>
+            <td>${r.requests.total}</td>
+            <td>${successPct}%</td>
+            <td>${formatDuration(r.latency.p50)}</td>
+            <td>${formatDuration(r.latency.p95)}</td>
+            <td>${r.tacoSigningTime ? formatDuration(r.tacoSigningTime.p50) : "N/A"}</td>
+            <td>${r.tacoSigningTime ? formatDuration(r.tacoSigningTime.p95) : "N/A"}</td>
+          </tr>`;
+          })
+          .join("")}
+      </tbody>
+    </table>
+    `
+        : ""
+    }
+
+    ${
+      burstResults.length > 0
+        ? `
+    <h2>Burst Size Tests</h2>
+    <p style="color: var(--text-muted); margin-bottom: 1rem;">
+      Tests concurrent request handling by firing N requests simultaneously, waiting for all to complete, then repeating.
+      This measures how the system handles spikes of concurrent load.
+    </p>
+
+    <div class="chart-row">
+      <div class="chart-container">
+        <canvas id="burstSuccessChart"></canvas>
+      </div>
+      <div class="chart-container">
+        <canvas id="burstLatencyChart"></canvas>
+      </div>
+    </div>
+
+    <h3>Detailed Results</h3>
+    <table>
+      <thead>
+        <tr>
+          <th>Burst Size</th>
+          <th>Total Requests</th>
+          <th>Batches</th>
+          <th>Success %</th>
+          <th>Latency p50</th>
+          <th>Latency p95</th>
+          <th>TACo p50</th>
+          <th>TACo p95</th>
+        </tr>
+      </thead>
+      <tbody>
+        ${burstResults
+          .map((r) => {
+            const successPct = (
+              (r.requests.success / r.requests.total) *
+              100
+            ).toFixed(1);
+            const batches = r.requests.total / r.targetRate;
+            return `<tr>
+            <td>${r.targetRate}</td>
+            <td>${r.requests.total}</td>
+            <td>${batches}</td>
+            <td>${successPct}%</td>
+            <td>${formatDuration(r.latency.p50)}</td>
+            <td>${formatDuration(r.latency.p95)}</td>
+            <td>${r.tacoSigningTime ? formatDuration(r.tacoSigningTime.p50) : "N/A"}</td>
+            <td>${r.tacoSigningTime ? formatDuration(r.tacoSigningTime.p95) : "N/A"}</td>
+          </tr>`;
+          })
+          .join("")}
+      </tbody>
+    </table>
+    `
+        : ""
+    }
+
+    ${
+      allErrors.length > 0
+        ? `
+    <h2>Error Analysis</h2>
+    ${allErrors
+      .map(({ source, errors }) => {
+        const grouped = groupErrors(errors);
+        return `
+      <div class="error-section">
+        <h3>${source}</h3>
+        ${Array.from(grouped.entries())
+          .map(
+            ([errorType, { count, full }]) => `
+          <details>
+            <summary class="error-type">
+              <span>${errorType}</span>
+              <span class="error-count">${count}</span>
+            </summary>
+            <div class="error-example">${full.replace(/</g, "&lt;").replace(/>/g, "&gt;")}</div>
+          </details>
+        `,
+          )
+          .join("")}
+      </div>
+    `;
+      })
+      .join("")}
+    `
+        : ""
+    }
+
+    <details class="glossary">
+      <summary><h2 style="display: inline;">Glossary</h2></summary>
+      <dl>
+        <dt>Target RPS</dt>
+        <dd>The rate at which new requests are initiated (e.g., 1 RPS = 1 new request every second)</dd>
+        <dt>Burst Size</dt>
+        <dd>Number of requests fired simultaneously in each batch</dd>
+        <dt>Latency</dt>
+        <dd>Total time from request start to completion (includes network, TACo signing, and all overhead)</dd>
+        <dt>TACo Signing Time</dt>
+        <dd>Time spent specifically in the TACo threshold signing operation</dd>
+        <dt>p50 / p95 / p99</dt>
+        <dd>Percentiles - p50 is median, p95 means 95% of requests were faster than this value</dd>
+      </dl>
+    </details>
+  </div>
+
+  <script>
+    const steadyData = ${JSON.stringify(
+      steadyResults.map((r) => ({
+        rate: r.targetRate,
+        successPct: (r.requests.success / r.requests.total) * 100,
+        latencyP50: r.latency.p50,
+        latencyP95: r.latency.p95,
+        latencyP99: r.latency.p99,
+        tacoP50: r.tacoSigningTime?.p50 || 0,
+        tacoP95: r.tacoSigningTime?.p95 || 0,
+      })),
+    )};
+
+    const burstData = ${JSON.stringify(
+      burstResults.map((r) => ({
+        size: r.targetRate,
+        successPct: (r.requests.success / r.requests.total) * 100,
+        latencyP50: r.latency.p50,
+        latencyP95: r.latency.p95,
+        latencyP99: r.latency.p99,
+        tacoP50: r.tacoSigningTime?.p50 || 0,
+        tacoP95: r.tacoSigningTime?.p95 || 0,
+      })),
+    )};
+
+    const chartColors = {
+      accent: '#4fc3f7',
+      success: '#66bb6a',
+      warning: '#ffa726',
+      p50: '#4fc3f7',
+      p95: '#ffa726',
+      p99: '#ef5350',
+    };
+
+    // Steady Rate Charts
+    if (steadyData.length > 0) {
+      // Success Rate Chart
+      new Chart(document.getElementById('steadySuccessChart'), {
+        type: 'bar',
+        data: {
+          labels: steadyData.map(d => d.rate + ' RPS'),
+          datasets: [{
+            label: 'Success Rate %',
+            data: steadyData.map(d => d.successPct),
+            backgroundColor: steadyData.map(d => d.successPct >= 95 ? chartColors.success : d.successPct >= 80 ? chartColors.warning : chartColors.p99),
+          }],
+        },
+        options: {
+          responsive: true,
+          plugins: {
+            title: { display: true, text: 'Success Rate by Target RPS', color: '#eee' },
+            legend: { display: false },
+          },
+          scales: {
+            x: { ticks: { color: '#888' }, grid: { color: '#333' } },
+            y: { ticks: { color: '#888' }, grid: { color: '#333' }, min: 0, max: 100, title: { display: true, text: 'Success %', color: '#888' } },
+          },
+        },
+      });
+
+      // Latency Chart
+      new Chart(document.getElementById('steadyLatencyChart'), {
+        type: 'line',
+        data: {
+          labels: steadyData.map(d => d.rate + ' RPS'),
+          datasets: [
+            {
+              label: 'Latency p50',
+              data: steadyData.map(d => d.latencyP50 / 1000),
+              borderColor: chartColors.p50,
+              fill: false,
+              tension: 0.1,
+            },
+            {
+              label: 'Latency p95',
+              data: steadyData.map(d => d.latencyP95 / 1000),
+              borderColor: chartColors.p95,
+              fill: false,
+              tension: 0.1,
+            },
+            {
+              label: 'TACo p50',
+              data: steadyData.map(d => d.tacoP50 / 1000),
+              borderColor: chartColors.p50,
+              borderDash: [5, 5],
+              fill: false,
+              tension: 0.1,
+            },
+            {
+              label: 'TACo p95',
+              data: steadyData.map(d => d.tacoP95 / 1000),
+              borderColor: chartColors.p95,
+              borderDash: [5, 5],
+              fill: false,
+              tension: 0.1,
+            },
+          ],
+        },
+        options: {
+          responsive: true,
+          plugins: {
+            title: { display: true, text: 'Latency by Target RPS (solid = total, dashed = TACo only)', color: '#eee' },
+            legend: { labels: { color: '#eee' } },
+          },
+          scales: {
+            x: { ticks: { color: '#888' }, grid: { color: '#333' } },
+            y: { ticks: { color: '#888' }, grid: { color: '#333' }, title: { display: true, text: 'Seconds', color: '#888' } },
+          },
+        },
+      });
+    }
+
+    // Burst Size Charts
+    if (burstData.length > 0) {
+      // Success Rate Chart
+      new Chart(document.getElementById('burstSuccessChart'), {
+        type: 'bar',
+        data: {
+          labels: burstData.map(d => 'Size ' + d.size),
+          datasets: [{
+            label: 'Success Rate %',
+            data: burstData.map(d => d.successPct),
+            backgroundColor: burstData.map(d => d.successPct >= 95 ? chartColors.success : d.successPct >= 80 ? chartColors.warning : chartColors.p99),
+          }],
+        },
+        options: {
+          responsive: true,
+          plugins: {
+            title: { display: true, text: 'Success Rate by Burst Size', color: '#eee' },
+            legend: { display: false },
+          },
+          scales: {
+            x: { ticks: { color: '#888' }, grid: { color: '#333' } },
+            y: { ticks: { color: '#888' }, grid: { color: '#333' }, min: 0, max: 100, title: { display: true, text: 'Success %', color: '#888' } },
+          },
+        },
+      });
+
+      // Latency Chart
+      new Chart(document.getElementById('burstLatencyChart'), {
+        type: 'line',
+        data: {
+          labels: burstData.map(d => 'Size ' + d.size),
+          datasets: [
+            {
+              label: 'Latency p50',
+              data: burstData.map(d => d.latencyP50 / 1000),
+              borderColor: chartColors.p50,
+              fill: false,
+              tension: 0.1,
+            },
+            {
+              label: 'Latency p95',
+              data: burstData.map(d => d.latencyP95 / 1000),
+              borderColor: chartColors.p95,
+              fill: false,
+              tension: 0.1,
+            },
+            {
+              label: 'TACo p50',
+              data: burstData.map(d => d.tacoP50 / 1000),
+              borderColor: chartColors.p50,
+              borderDash: [5, 5],
+              fill: false,
+              tension: 0.1,
+            },
+            {
+              label: 'TACo p95',
+              data: burstData.map(d => d.tacoP95 / 1000),
+              borderColor: chartColors.p95,
+              borderDash: [5, 5],
+              fill: false,
+              tension: 0.1,
+            },
+          ],
+        },
+        options: {
+          responsive: true,
+          plugins: {
+            title: { display: true, text: 'Latency by Burst Size (solid = total, dashed = TACo only)', color: '#eee' },
+            legend: { labels: { color: '#eee' } },
+          },
+          scales: {
+            x: { ticks: { color: '#888' }, grid: { color: '#333' } },
+            y: { ticks: { color: '#888' }, grid: { color: '#333' }, title: { display: true, text: 'Seconds', color: '#888' } },
+          },
+        },
+      });
+    }
+  </script>
+</body>
+</html>`;
+
+      fs.writeFileSync(output, html);
     }
 
     console.log(`[stress-test] Report saved to: ${output}`);

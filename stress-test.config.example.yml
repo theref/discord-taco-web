@@ -4,24 +4,30 @@
 # captured from your bot logs.
 #
 # Usage:
-#   npx tsx scripts/stress-test.ts --config=stress-test.config.yml
-#   npx tsx scripts/stress-test.ts --config=stress-test.config.yml --mode=sweep
-#   pnpm stress-test --config=stress-test.config.yml --mode=sweep
+#   npx tsx scripts/stress-test.ts --config=stress-test.config.yml --mode=sweep --output=report.html
+#   npx tsx scripts/stress-test.ts --config=stress-test.config.yml --mode=steady --rate=5
+#   npx tsx scripts/stress-test.ts --config=stress-test.config.yml --mode=burst --rate=10
 
 defaults:
-  # Execution mode: steady, burst, or sweep
-  mode: steady
+  # Execution mode: steady, burst, or sweep (recommended: sweep)
+  mode: sweep
 
-  # Duration in seconds per rate level (for sweep mode or single runs)
-  duration: 60
+  # Duration in seconds per rate level (for steady mode tests)
+  duration: 10
 
-  # Rates to test in sweep mode (requests per second)
-  rates: [0.5, 1, 3, 5, 10]
+  # Rates to test in sweep mode for steady tests (requests per second)
+  rates: [0.5, 1, 5]
 
-  # Default rate for single-mode runs
+  # Burst sizes to test in sweep mode (concurrent requests per batch)
+  burstSizes: [5, 10, 20]
+
+  # Number of batches to run for each burst size
+  batchesPerBurst: 3
+
+  # Default rate/burst size for single-mode runs
   rate: 1
 
-  # Optional: fixed request count instead of duration
+  # Optional: fixed request count instead of duration (for steady mode)
   # requests: 20
 
 # Discord payloads captured from bot logs
