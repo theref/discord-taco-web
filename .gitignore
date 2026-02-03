@@ -24,5 +24,4 @@ scripts/validation-error.txt
 
 # Stress test config (contains sensitive Discord payloads)
 stress-test.config.yml
-stress-test-results/
 report.html
