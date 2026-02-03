@@ -729,7 +729,7 @@ async function runSteadyMode(
   let completedCount = 0;
 
   console.log(
-    `[stress-test] Starting steady mode: ${rate} RPS, ${totalRequests} requests`,
+    `[stress-test] Starting steady mode: ${rate} requests/sec, ${totalRequests} total requests`,
   );
 
   const startTime = Date.now();
@@ -881,7 +881,7 @@ function printResults(
   console.log("=".repeat(60));
   console.log();
   const modeLabel =
-    mode === "burst" ? `Burst size: ${rate}` : `Rate: ${rate} RPS`;
+    mode === "burst" ? `Burst size: ${rate}` : `Rate: ${rate} requests/sec`;
   console.log(
     `Mode: ${mode} | ${modeLabel} | Duration: ${totalDuration.toFixed(1)}s`,
   );
@@ -959,7 +959,7 @@ Options:
   --output=<file>     Save report to file (.html for interactive report, .json for data)
 
 Modes:
-  steady    Fire requests at a fixed rate (e.g., 1 RPS = 1 request every 1s)
+  steady    Fire requests at a fixed rate (e.g., 1 request/sec = 1 request every 1s)
   burst     Fire N requests simultaneously, wait for all to complete, repeat
   sweep     Run all steady rate tests, then all burst size tests (recommended)
 
@@ -995,7 +995,7 @@ Examples:
 
   if (mode === "sweep") {
     console.log(`\n[stress-test] Starting sweep mode`);
-    console.log(`[stress-test] Steady rates: ${rates.join(", ")} RPS`);
+    console.log(`[stress-test] Steady rates: ${rates.join(", ")} requests/sec`);
     console.log(`[stress-test] Burst sizes: ${burstSizes.join(", ")}`);
     console.log(`[stress-test] Duration per steady rate: ${duration}s`);
     console.log(`[stress-test] Batches per burst size: ${batchesPerBurst}\n`);
@@ -1007,7 +1007,7 @@ Examples:
 
     for (const testRate of rates) {
       console.log(`\n${"─".repeat(60)}`);
-      console.log(`Steady @ ${testRate} RPS`);
+      console.log(`Steady @ ${testRate} requests/sec`);
       console.log("─".repeat(60));
       const results = await runSteadyMode(
         config.payloads,
@@ -1018,10 +1018,14 @@ Examples:
       steadyResults.push(printResults(results, "steady", testRate));
 
       if (testRate !== rates[rates.length - 1]) {
-        console.log("\n[stress-test] Pausing 10s before next rate...\n");
-        await sleep(10000);
+        console.log("\n[stress-test] Cooling down 30s before next rate...\n");
+        await sleep(30000);
       }
     }
+
+    // Cooldown between steady and burst sections
+    console.log("\n[stress-test] Cooling down 30s before burst tests...\n");
+    await sleep(30000);
 
     // Then run all burst tests
     console.log("\n\n" + "=".repeat(60));
@@ -1040,8 +1044,10 @@ Examples:
       burstResults.push(printResults(results, "burst", burstSize));
 
       if (burstSize !== burstSizes[burstSizes.length - 1]) {
-        console.log("\n[stress-test] Pausing 10s before next burst size...\n");
-        await sleep(10000);
+        console.log(
+          "\n[stress-test] Cooling down 30s before next burst size...\n",
+        );
+        await sleep(30000);
       }
     }
 
@@ -1051,7 +1057,7 @@ Examples:
     console.log("=".repeat(60));
 
     console.log("\nSteady Rate Results:");
-    console.log("Rate (RPS) | Requests | Success % | Latency p50 | TACo p50");
+    console.log("Rate       | Requests | Success % | Latency p50 | TACo p50");
     console.log("-".repeat(65));
     for (const r of steadyResults) {
       const successPct = (
@@ -1133,7 +1139,7 @@ Examples:
       for (const r of steadyResults) {
         if (r.errors.length > 0) {
           allErrors.push({
-            source: `Steady @ ${r.targetRate} RPS`,
+            source: `Steady @ ${r.targetRate} requests/sec`,
             errors: r.errors,
           });
         }
@@ -1340,7 +1346,7 @@ Examples:
     <h2>Configuration</h2>
     <ul class="config-list">
       <li><strong>Mode:</strong> ${mode}</li>
-      <li><strong>Steady Rates:</strong> ${rates.join(", ")} RPS</li>
+      <li><strong>Steady Rates:</strong> ${rates.join(", ")} requests/sec</li>
       <li><strong>Duration per Rate:</strong> ${duration}s</li>
       <li><strong>Burst Sizes:</strong> ${burstSizes.join(", ")}</li>
       <li><strong>Batches per Burst:</strong> ${batchesPerBurst}</li>
@@ -1385,7 +1391,7 @@ Examples:
               100
             ).toFixed(1);
             return `<tr>
-            <td>${r.targetRate} RPS</td>
+            <td>${r.targetRate}/sec</td>
             <td>${r.requests.total}</td>
             <td>${successPct}%</td>
             <td>${formatDuration(r.latency.p50)}</td>
@@ -1493,8 +1499,8 @@ Examples:
     <details class="glossary">
       <summary><h2 style="display: inline;">Glossary</h2></summary>
       <dl>
-        <dt>Target RPS</dt>
-        <dd>The rate at which new requests are initiated (e.g., 1 RPS = 1 new request every second)</dd>
+        <dt>Request Rate</dt>
+        <dd>The rate at which new requests are initiated (e.g., 1/sec = 1 new request every second)</dd>
         <dt>Burst Size</dt>
         <dd>Number of requests fired simultaneously in each batch</dd>
         <dt>Latency</dt>
@@ -1547,7 +1553,7 @@ Examples:
       new Chart(document.getElementById('steadySuccessChart'), {
         type: 'bar',
         data: {
-          labels: steadyData.map(d => d.rate + ' RPS'),
+          labels: steadyData.map(d => d.rate + '/sec'),
           datasets: [{
             label: 'Success Rate %',
             data: steadyData.map(d => d.successPct),
@@ -1557,7 +1563,7 @@ Examples:
         options: {
           responsive: true,
           plugins: {
-            title: { display: true, text: 'Success Rate by Target RPS', color: '#eee' },
+            title: { display: true, text: 'Success Rate by Request Rate', color: '#eee' },
             legend: { display: false },
           },
           scales: {
@@ -1571,7 +1577,7 @@ Examples:
       new Chart(document.getElementById('steadyLatencyChart'), {
         type: 'line',
         data: {
-          labels: steadyData.map(d => d.rate + ' RPS'),
+          labels: steadyData.map(d => d.rate + '/sec'),
           datasets: [
             {
               label: 'Latency p50',
@@ -1608,7 +1614,7 @@ Examples:
         options: {
           responsive: true,
           plugins: {
-            title: { display: true, text: 'Latency by Target RPS (solid = total, dashed = TACo only)', color: '#eee' },
+            title: { display: true, text: 'Latency by Request Rate (solid = total, dashed = TACo only)', color: '#eee' },
             legend: { labels: { color: '#eee' } },
           },
           scales: {
@@ -1707,6 +1713,7 @@ Examples:
   }
 
   console.log("\n[stress-test] Done!");
+  process.exit(0);
 }
 
 main().catch((err) => {
