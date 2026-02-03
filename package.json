@@ -9,15 +9,16 @@
     "start": "tsx src/index.ts",
     "dev": "tsx src/index.ts --debug",
     "bot:deploy": "node src/bot/deploy-commands.js",
-    "bot:dev": "node src/bot/index.js"
+    "bot:dev": "node src/bot/index.js",
+    "stress-test": "tsx scripts/stress-test.ts"
   },
   "dependencies": {
     "@astronautlabs/jsonpath": "^1.1.2",
     "@discordjs/rest": "^2.3.0",
     "@metamask/delegation-toolkit": "^0.11.0",
     "@metamask/delegation-utils": "^0.11.0",
-    "@nucypher/shared": "0.6.0-alpha.8",
-    "@nucypher/taco": "0.7.0-alpha.9",
+    "@nucypher/shared": "0.6.0-alpha.10",
+    "@nucypher/taco": "0.7.0-alpha.10",
     "discord-api-types": "^0.37.83",
     "dotenv": "^16.6.1",
     "ethers": "^5.8.0",

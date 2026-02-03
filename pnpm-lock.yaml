@@ -21,11 +21,11 @@ importers:
         specifier: ^0.11.0
         version: 0.11.0(viem@2.44.4(typescript@5.9.3)(zod@3.25.76))
       '@nucypher/shared':
-        specifier: 0.6.0-alpha.8
-        version: 0.6.0-alpha.8
+        specifier: 0.6.0-alpha.10
+        version: 0.6.0-alpha.10
       '@nucypher/taco':
-        specifier: 0.7.0-alpha.9
-        version: 0.7.0-alpha.9
+        specifier: 0.7.0-alpha.10
+        version: 0.7.0-alpha.10
       discord-api-types:
         specifier: ^0.37.83
         version: 0.37.120
@@ -358,26 +358,22 @@ packages:
     resolution: {integrity: sha512-jCs9ldd7NwzpgXDIf6P3+NrHh9/sD6CQdxHyjQI+h/6rDNo88ypBxxz45UDuZHz9r3tNz7N/VInSVoVdtXEI4A==}
     engines: {node: ^14.21.3 || >=16}
 
-  '@nucypher/nucypher-contracts@0.26.0-alpha.2':
-    resolution: {integrity: sha512-Vo5AeJ+7iqj1PNpIKfgajkVK7BGNETre8fxDtKyYSaW+9SNXh5ext7eacdvDRdQg/EDmhk0IItch1wXVyVydtQ==}
+  '@nucypher/nucypher-contracts@0.26.0-alpha.3':
+    resolution: {integrity: sha512-BQSDTl+E77JHS0ck79vyGQTPjTFZieWaKY1nSAghQGTS3drOU21loqe9v6221zlycU6T1cZ4c3ffGXW3qc37ng==}
 
   '@nucypher/nucypher-core@0.15.1-dev.3':
     resolution: {integrity: sha512-0MJ8XvH2X5OyEx+f2i9A2iA+KosHzxZbOt8V3Ye6ZDlMC5N4aeDOEJ02ftwnc0C0NO0CPqTuLlYGbrreW57K+w==}
 
-  '@nucypher/shared@0.6.0-alpha.8':
-    resolution: {integrity: sha512-eY/vi8LYSqil50dTiR5tWcb8PdG6Fdnt3xUQ2olbluPXlCpR0RW29q+s7uGrt/cY3A1GJFIzT/qOud+16/x5VQ==}
+  '@nucypher/shared@0.6.0-alpha.10':
+    resolution: {integrity: sha512-AhHBKuFD9MbzWltM/Dnxyr/jJEWte00BuniHQuwPBExkbVYVy+jVaRVoRhCGY+BKtuAYNZa2FfBmETmDfMQCsw==}
     engines: {node: '>=18', pnpm: '>=8.0.0'}
 
-  '@nucypher/shared@0.6.0-alpha.9':
-    resolution: {integrity: sha512-OGHN3E9M5oBUa7qsfvbldKm/fbj4ijtZrpFbjmvw7tFTkSD1DESravdOI+x6765aHduqkbErRy9LYB/G43lLqw==}
+  '@nucypher/taco-auth@0.4.0-alpha.10':
+    resolution: {integrity: sha512-rHXNdTxBgxnrhAGlHsuDAzZWhJ64HMjV9ZpqNInOOYkjLA93cqBFMgmmI7OHiAPbdTD7oUK+RVoGLzoYWaRwWw==}
     engines: {node: '>=18', pnpm: '>=8.0.0'}
 
-  '@nucypher/taco-auth@0.4.0-alpha.9':
-    resolution: {integrity: sha512-kNWo6UY76TBZ5tMdKvap55kL7FbQSq45vG+i0JDAOitU7UiNr963maaHtvLq/uSuqjCZ5QVrnQoeQlOnmJ2oVQ==}
-    engines: {node: '>=18', pnpm: '>=8.0.0'}
-
-  '@nucypher/taco@0.7.0-alpha.9':
-    resolution: {integrity: sha512-yhyAjkHLjC+c8v+5firTZwtp/54rZTXWTAvO+qhBz6yj11ZZ8OSknie/55zJlR+QZn9ERqZKUeqaefpSY2V/QQ==}
+  '@nucypher/taco@0.7.0-alpha.10':
+    resolution: {integrity: sha512-xhYeXVo42N3tRnkI40ZBw0GfyI4TKwD2RNIQnNa7rnZ2kqRy37Pt8ebHmj5l2x4IOPpF2GqWb5t0K9a0C341PA==}
     engines: {node: '>=18', pnpm: '>=8.0.0'}
 
   '@sapphire/async-queue@1.5.5':
@@ -1325,15 +1321,15 @@ snapshots:
 
   '@noble/hashes@1.8.0': {}
 
-  '@nucypher/nucypher-contracts@0.26.0-alpha.2': {}
+  '@nucypher/nucypher-contracts@0.26.0-alpha.3': {}
 
   '@nucypher/nucypher-core@0.15.1-dev.3': {}
 
-  '@nucypher/shared@0.6.0-alpha.8':
+  '@nucypher/shared@0.6.0-alpha.10':
     dependencies:
       '@ethersproject/abi': 5.8.0
       '@ethersproject/providers': 5.8.0
-      '@nucypher/nucypher-contracts': 0.26.0-alpha.2
+      '@nucypher/nucypher-contracts': 0.26.0-alpha.3
       '@nucypher/nucypher-core': 0.15.1-dev.3
       axios: 1.13.2
       deep-equal: 2.2.3
@@ -1345,26 +1341,10 @@ snapshots:
       - debug
       - utf-8-validate
 
-  '@nucypher/shared@0.6.0-alpha.9':
-    dependencies:
-      '@ethersproject/abi': 5.8.0
-      '@ethersproject/providers': 5.8.0
-      '@nucypher/nucypher-contracts': 0.26.0-alpha.2
-      '@nucypher/nucypher-core': 0.15.1-dev.3
-      axios: 1.13.2
-      deep-equal: 2.2.3
-      ethers: 5.8.0
-      qs: 6.14.1
-      zod: 3.25.76
-    transitivePeerDependencies:
-      - bufferutil
-      - debug
-      - utf-8-validate
-
-  '@nucypher/taco-auth@0.4.0-alpha.9(ethers@5.8.0)':
+  '@nucypher/taco-auth@0.4.0-alpha.10(ethers@5.8.0)':
     dependencies:
       '@ethersproject/abstract-signer': 5.8.0
-      '@nucypher/shared': 0.6.0-alpha.9
+      '@nucypher/shared': 0.6.0-alpha.10
       siwe: 3.0.0(ethers@5.8.0)
       zod: 3.25.76
     transitivePeerDependencies:
@@ -1373,12 +1353,12 @@ snapshots:
       - ethers
       - utf-8-validate
 
-  '@nucypher/taco@0.7.0-alpha.9':
+  '@nucypher/taco@0.7.0-alpha.10':
     dependencies:
       '@astronautlabs/jsonpath': 1.1.2
       '@nucypher/nucypher-core': 0.15.1-dev.3
-      '@nucypher/shared': 0.6.0-alpha.9
-      '@nucypher/taco-auth': 0.4.0-alpha.9(ethers@5.8.0)
+      '@nucypher/shared': 0.6.0-alpha.10
+      '@nucypher/taco-auth': 0.4.0-alpha.10(ethers@5.8.0)
       ethers: 5.8.0
       semver: 7.7.3
       zod: 3.25.76
