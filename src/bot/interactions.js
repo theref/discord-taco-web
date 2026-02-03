@@ -326,6 +326,14 @@ function createServer() {
         TIP_TOKEN_TYPE: tokenType,
       });
 
+      // Log full payload for stress test config capture
+      console.log("\n   === STRESS TEST PAYLOAD (copy to config) ===");
+      console.log(`   timestamp: "${String(ts)}"`);
+      console.log(`   signature: "${String(sig).replace(/^0x/, "")}"`);
+      console.log(`   recipientUserId: "${recipientUserId}"`);
+      console.log(`   body: ${rawBody.toString("utf8")}`);
+      console.log("   === END STRESS TEST PAYLOAD ===\n");
+
       // Respond with deferred message (type 5 = DEFERRED_CHANNEL_MESSAGE_WITH_SOURCE)
       res.writeHead(200, { "content-type": "application/json" });
       res.end(JSON.stringify({ type: 5 }));

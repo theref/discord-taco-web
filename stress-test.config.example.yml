@@ -1,0 +1,42 @@
+# TACo Stress Test Configuration
+#
+# Copy this file to stress-test.config.yml and fill in real Discord payloads
+# captured from your bot logs.
+#
+# Usage:
+#   npx tsx scripts/stress-test.ts --config=stress-test.config.yml
+#   npx tsx scripts/stress-test.ts --config=stress-test.config.yml --mode=sweep
+#   pnpm stress-test --config=stress-test.config.yml --mode=sweep
+
+defaults:
+  # Execution mode: steady, burst, or sweep
+  mode: steady
+
+  # Duration in seconds per rate level (for sweep mode or single runs)
+  duration: 60
+
+  # Rates to test in sweep mode (requests per second)
+  rates: [0.5, 1, 3, 5, 10]
+
+  # Default rate for single-mode runs
+  rate: 1
+
+  # Optional: fixed request count instead of duration
+  # requests: 20
+
+# Discord payloads captured from bot logs
+# Each payload needs:
+#   - timestamp: The x-signature-timestamp header
+#   - signature: The x-signature-ed25519 header (hex, without 0x prefix)
+#   - recipientUserId: The tip recipient's Discord user ID
+#   - bodyJson: The full Discord interaction as a JSON string (single line)
+#
+# To capture payloads, run the bot and send a /taco execute command.
+# Look for the "STRESS TEST PAYLOAD" block in the logs and copy the body JSON.
+
+payloads:
+  - name: "example-tip"
+    timestamp: "1234567890"
+    signature: "your_signature_hex_here"
+    recipientUserId: "123456789012345678"
+    bodyJson: '{"type":2,"application_id":"your_app_id","member":{"user":{"id":"sender_discord_id"}},"data":{"name":"taco","options":[{"name":"execute","type":1,"options":[{"name":"receiver","type":6,"value":"recipient_discord_id"},{"name":"token","type":3,"value":"ETH"},{"name":"amount","type":3,"value":"0.001"}]}]}}'
