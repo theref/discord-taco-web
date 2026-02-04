@@ -716,16 +716,6 @@ async function prepareAllPayloads(
 
 const REQUEST_TIMEOUT_MS = 60_000; // 60 second timeout per request
 
-// Suppress console.error during request execution to avoid noisy Porter error logs
-// The errors are still captured and reported in the test results
-function withSuppressedConsoleError<T>(fn: () => Promise<T>): Promise<T> {
-  const originalConsoleError = console.error;
-  console.error = () => {}; // Suppress
-  return fn().finally(() => {
-    console.error = originalConsoleError; // Restore
-  });
-}
-
 async function withTimeout<T>(
   promise: Promise<T>,
   timeoutMs: number,
@@ -745,14 +735,18 @@ async function executeSigningRequest(
 ): Promise<RequestResult> {
   const startTime = Date.now();
 
-  // Wrap the entire execution in a timeout, suppressing console.error from Porter
-  return withSuppressedConsoleError(() =>
-    withTimeout(
+  // Suppress console.error during request execution to avoid noisy Porter error logs
+  // The errors are still captured and reported in the test results
+  const originalConsoleError = console.error;
+  console.error = () => {}; // Suppress
+
+  try {
+    return await withTimeout(
       executeSigningRequestInner(prepared, startTime),
       REQUEST_TIMEOUT_MS,
       `Request timed out after ${REQUEST_TIMEOUT_MS / 1000}s`,
-    ),
-  ).catch((error) => {
+    );
+  } catch (error) {
     const errorMessage = error instanceof Error ? error.message : String(error);
     return {
       success: false,
@@ -762,7 +756,9 @@ async function executeSigningRequest(
       error: `[timeout] ${errorMessage}`,
       index: 0,
     };
-  });
+  } finally {
+    console.error = originalConsoleError; // Restore
+  }
 }
 
 async function executeSigningRequestInner(
