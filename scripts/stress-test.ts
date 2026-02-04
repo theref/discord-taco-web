@@ -138,6 +138,7 @@ async function signUserOpWithTaco(
     signature: string;
     payload: string;
   },
+  timeout: number,
 ) {
   const signingContext =
     await conditions.context.ConditionContext.forSigningCohort(
@@ -161,7 +162,9 @@ async function signUserOpWithTaco(
     BASE_SEPOLIA_CHAIN_ID,
     userOp as UserOperationToSign,
     AA_VERSION,
-    { context: signingContext, timeout: 120 },
+    signingContext,
+    undefined, // porterUris
+    timeout,
   );
   const signingTimeMs = Date.now() - startTime;
 
@@ -202,6 +205,8 @@ interface ConfigDefaults {
   requests?: number;
   burstSizes?: number[];
   batchesPerBurst?: number;
+  cooldown?: number;
+  timeout?: number;
 }
 
 interface Config {
@@ -549,6 +554,7 @@ function loadConfig(cliOptions: CLIOptions): {
   const burstSizes = configDefaults.burstSizes || [1, 3, 5, 10];
   const batchesPerBurst = configDefaults.batchesPerBurst || 10;
   const cooldown = configDefaults.cooldown ?? 30;
+  const timeout = configDefaults.timeout ?? 120;
 
   return {
     config,
@@ -560,6 +566,7 @@ function loadConfig(cliOptions: CLIOptions): {
     burstSizes,
     batchesPerBurst,
     cooldown,
+    timeout,
     output: cliOptions.output,
   };
 }
@@ -714,7 +721,8 @@ async function prepareAllPayloads(
 // Request Executor
 // =============================================================================
 
-const REQUEST_TIMEOUT_MS = 60_000; // 60 second timeout per request
+// Global timeout setting (in seconds) - set by config, used by request executor
+let REQUEST_TIMEOUT_SECONDS = 120;
 
 async function withTimeout<T>(
   promise: Promise<T>,
@@ -741,10 +749,11 @@ async function executeSigningRequest(
   console.error = () => {}; // Suppress
 
   try {
+    const timeoutMs = REQUEST_TIMEOUT_SECONDS * 1000;
     return await withTimeout(
       executeSigningRequestInner(prepared, startTime),
-      REQUEST_TIMEOUT_MS,
-      `Request timed out after ${REQUEST_TIMEOUT_MS / 1000}s`,
+      timeoutMs,
+      `Request timed out after ${REQUEST_TIMEOUT_SECONDS}s`,
     );
   } catch (error) {
     const errorMessage = error instanceof Error ? error.message : String(error);
@@ -786,6 +795,7 @@ async function executeSigningRequestInner(
       userOp,
       signingCoordinatorProvider,
       prepared.discordContext,
+      REQUEST_TIMEOUT_SECONDS,
     );
     tacoSigningTimeMs = Date.now() - tacoStartTime;
 
@@ -2155,13 +2165,19 @@ Examples:
     burstSizes,
     batchesPerBurst,
     cooldown,
+    timeout,
     output,
   } = loadConfig(cliOptions);
+
+  // Set global timeout for request executor
+  REQUEST_TIMEOUT_SECONDS = timeout;
 
   console.log("[stress-test] TACo Stress Test Tool");
   console.log(`[stress-test] Config: ${cliOptions.config}`);
   console.log(`[stress-test] Mode: ${mode}`);
   console.log(`[stress-test] Payloads: ${config.payloads.length}`);
+  console.log(`[stress-test] Timeout: ${timeout}s`);
+  console.log(`[stress-test] Cooldown: ${cooldown}s`);
 
   await initializeClients();
 
