@@ -208,6 +208,8 @@ interface ConfigDefaults {
   batchesPerBurst?: number;
   cooldown?: number;
   timeout?: number;
+  maxDuration?: number;
+  maxConsecutiveFailures?: number;
 }
 
 interface Config {
@@ -225,6 +227,8 @@ interface CLIOptions {
   output?: string;
   fromData?: string;
   regenerate?: boolean;
+  maxDuration?: number;
+  maxConsecutiveFailures?: number;
 }
 
 interface RequestResult {
@@ -258,6 +262,18 @@ interface ErrorWithCount {
   count: number;
 }
 
+interface TimelineRequest {
+  index: number;
+  timestamp: number; // absolute time (Date.now())
+  elapsedSec: number; // seconds since test start
+  duration: number; // total request time (ms)
+  tacoSigningTimeMs: number | null;
+  success: boolean;
+  error?: string;
+}
+
+type StopReason = "duration" | "consecutive-failures" | "completed";
+
 interface RunResult {
   mode: "steady" | "burst";
   // For steady mode: target requests per minute
@@ -277,6 +293,10 @@ interface RunResult {
   failureTacoSigningTime: Stats | null;
   nodeFailures: NodeFailure[];
   errors: ErrorWithCount[];
+  // Timeline data for steady mode
+  timeline?: TimelineRequest[];
+  stopReason?: StopReason;
+  consecutiveFailuresAtStop?: number;
 }
 
 interface TestData {
@@ -289,6 +309,8 @@ interface TestData {
     rates: number[];
     burstSizes: number[];
     batchesPerBurst: number;
+    maxDuration?: number;
+    maxConsecutiveFailures?: number;
   };
   steadyResults: RunResult[];
   burstResults: RunResult[];
@@ -513,6 +535,10 @@ function parseArgs(args: string[]): CLIOptions {
       options.fromData = arg.slice(12);
     } else if (arg === "--regenerate") {
       options.regenerate = true;
+    } else if (arg.startsWith("--max-duration=")) {
+      options.maxDuration = parseInt(arg.slice(15), 10);
+    } else if (arg.startsWith("--max-failures=")) {
+      options.maxConsecutiveFailures = parseInt(arg.slice(15), 10);
     }
   }
 
@@ -529,6 +555,8 @@ function loadConfig(cliOptions: CLIOptions): {
   burstSizes: number[];
   batchesPerBurst: number;
   cooldown: number;
+  maxDuration?: number;
+  maxConsecutiveFailures?: number;
   output?: string;
 } {
   if (!cliOptions.config) {
@@ -561,6 +589,9 @@ function loadConfig(cliOptions: CLIOptions): {
   const batchesPerBurst = configDefaults.batchesPerBurst || 10;
   const cooldown = configDefaults.cooldown ?? 30;
   const timeout = configDefaults.timeout ?? 120;
+  const maxDuration = cliOptions.maxDuration ?? configDefaults.maxDuration;
+  const maxConsecutiveFailures =
+    cliOptions.maxConsecutiveFailures ?? configDefaults.maxConsecutiveFailures;
 
   return {
     config,
@@ -573,6 +604,8 @@ function loadConfig(cliOptions: CLIOptions): {
     batchesPerBurst,
     cooldown,
     timeout,
+    maxDuration,
+    maxConsecutiveFailures,
     output: cliOptions.output,
   };
 }
@@ -869,70 +902,176 @@ function sleep(ms: number): Promise<void> {
   return new Promise((resolve) => setTimeout(resolve, ms));
 }
 
+interface SteadyModeOptions {
+  rate: number;
+  duration?: number;
+  requestCount?: number;
+  maxDuration?: number;
+  maxConsecutiveFailures?: number;
+}
+
+interface SteadyModeResult {
+  results: RequestResult[];
+  timeline: TimelineRequest[];
+  stopReason: StopReason;
+  consecutiveFailuresAtStop?: number;
+}
+
 async function runSteadyMode(
   preparedPayloads: PreparedPayload[],
-  rate: number,
-  duration: number,
-  requestCount?: number,
-): Promise<RequestResult[]> {
+  options: SteadyModeOptions,
+): Promise<SteadyModeResult> {
+  const { rate, duration, requestCount, maxDuration, maxConsecutiveFailures } =
+    options;
   const intervalMs = 60000 / rate; // rate is requests per minute
-  const totalRequests = requestCount ?? Math.floor((duration / 60) * rate);
+
+  // Determine if we're in "timeline mode" (with stop conditions) or "fixed count mode"
+  const hasStopConditions =
+    maxDuration !== undefined || maxConsecutiveFailures !== undefined;
+
+  // For fixed count mode, calculate total requests upfront
+  const totalRequests = !hasStopConditions
+    ? (requestCount ?? Math.floor(((duration || 60) / 60) * rate))
+    : undefined;
+
   let payloadIndex = 0;
   let completedCount = 0;
+  let consecutiveFailures = 0;
 
-  console.log(
-    `[stress-test] Starting steady mode: ${rate} requests/min, ${totalRequests} total requests`,
-  );
+  const modeDesc = hasStopConditions
+    ? `${rate} requests/min, max ${maxDuration || "∞"}s, max ${maxConsecutiveFailures || "∞"} consecutive failures`
+    : `${rate} requests/min, ${totalRequests} total requests`;
 
-  const startTime = Date.now();
-  const pendingRequests: Promise<RequestResult>[] = [];
+  console.log(`[stress-test] Starting steady mode: ${modeDesc}`);
 
-  // Fire requests at the target rate (don't wait for completion)
-  for (let i = 0; i < totalRequests; i++) {
+  const testStartTime = Date.now();
+  const results: RequestResult[] = [];
+  const timeline: TimelineRequest[] = [];
+  const pendingRequests: Map<number, Promise<RequestResult>> = new Map();
+  let nextRequestIndex = 0;
+  let stopReason: StopReason = "completed";
+  let shouldStop = false;
+
+  // Process completed request and update state
+  const processResult = (result: RequestResult): boolean => {
+    completedCount++;
+    results.push(result);
+
+    // Track consecutive failures
+    if (result.success) {
+      consecutiveFailures = 0;
+    } else {
+      consecutiveFailures++;
+    }
+
+    // Add to timeline
+    const elapsed = (result.endTime - testStartTime) / 1000;
+    timeline.push({
+      index: result.index,
+      timestamp: result.endTime,
+      elapsedSec: elapsed,
+      duration: result.duration,
+      tacoSigningTimeMs: result.tacoSigningTimeMs ?? null,
+      success: result.success,
+      error: result.error,
+    });
+
+    // Progress update
+    const inFlight = pendingRequests.size;
+    const totalDesc = totalRequests ? `/${totalRequests}` : "";
+    console.log(
+      `[${elapsed.toFixed(0).padStart(3, "0")}s] Completed ${completedCount}${totalDesc} | ` +
+        `in-flight: ${inFlight} | ` +
+        `${result.success ? "ok" : "FAIL"} ${result.duration}ms` +
+        (result.tacoSigningTimeMs
+          ? ` | taco: ${result.tacoSigningTimeMs}ms`
+          : "") +
+        (consecutiveFailures > 0
+          ? ` | consec-fail: ${consecutiveFailures}`
+          : ""),
+    );
+
+    // Check stop conditions
+    if (
+      maxConsecutiveFailures !== undefined &&
+      consecutiveFailures >= maxConsecutiveFailures
+    ) {
+      stopReason = "consecutive-failures";
+      return true; // should stop
+    }
+
+    return false;
+  };
+
+  // Main loop - fire requests at rate, check stop conditions
+  while (!shouldStop) {
+    // Check max duration
+    const elapsedSec = (Date.now() - testStartTime) / 1000;
+    if (maxDuration !== undefined && elapsedSec >= maxDuration) {
+      stopReason = "duration";
+      break;
+    }
+
+    // Check if we've fired all requests (fixed count mode)
+    if (totalRequests !== undefined && nextRequestIndex >= totalRequests) {
+      break;
+    }
+
+    // Fire next request
     const prepared = preparedPayloads[payloadIndex % preparedPayloads.length];
     payloadIndex++;
-    const requestIndex = i;
+    const requestIndex = nextRequestIndex++;
 
-    // Fire the request (don't await)
     const requestPromise = executeSigningRequest(prepared).then((result) => {
       result.index = requestIndex;
-      completedCount++;
-
-      // Progress update on completion
-      const elapsed = (Date.now() - startTime) / 1000;
-      const inFlight = pendingRequests.length - completedCount;
-      console.log(
-        `[${elapsed.toFixed(0).padStart(3, "0")}s] Completed ${completedCount}/${totalRequests} | ` +
-          `in-flight: ${inFlight} | ` +
-          `${result.success ? "ok" : "FAIL"} ${result.duration}ms` +
-          (result.tacoSigningTimeMs
-            ? ` | taco: ${result.tacoSigningTimeMs}ms`
-            : ""),
-      );
-
+      pendingRequests.delete(requestIndex);
+      shouldStop = processResult(result);
       return result;
     });
 
-    pendingRequests.push(requestPromise);
+    pendingRequests.set(requestIndex, requestPromise);
 
-    // Wait for next interval before firing the next request
-    if (i < totalRequests - 1) {
-      const elapsed = Date.now() - startTime;
-      const expectedElapsed = (i + 1) * intervalMs;
-      const waitTime = Math.max(0, expectedElapsed - elapsed);
-      if (waitTime > 0) {
-        await sleep(waitTime);
+    // Wait for next interval
+    const elapsed = Date.now() - testStartTime;
+    const expectedElapsed = nextRequestIndex * intervalMs;
+    const waitTime = Math.max(0, expectedElapsed - elapsed);
+    if (waitTime > 0) {
+      await sleep(waitTime);
+    }
+  }
+
+  // Abandon in-flight requests on stop condition
+  if (pendingRequests.size > 0 && stopReason !== "completed") {
+    console.log(
+      `[stress-test] Stop condition reached, abandoning ${pendingRequests.size} in-flight requests`,
+    );
+  } else if (pendingRequests.size > 0) {
+    // Only wait for in-flight if we completed normally (fixed count mode)
+    console.log(
+      `[stress-test] Waiting for ${pendingRequests.size} in-flight requests...`,
+    );
+    const remaining = await Promise.all(pendingRequests.values());
+    for (const result of remaining) {
+      if (!results.find((r) => r.index === result.index)) {
+        processResult(result);
       }
     }
   }
 
-  // Wait for all requests to complete
   console.log(
-    `[stress-test] All ${totalRequests} requests fired, waiting for completion...`,
+    `[stress-test] Steady mode complete. Stop reason: ${stopReason}` +
+      (stopReason === "consecutive-failures"
+        ? ` (${consecutiveFailures} consecutive failures)`
+        : ""),
   );
-  const results = await Promise.all(pendingRequests);
 
-  return results;
+  return {
+    results,
+    timeline,
+    stopReason,
+    consecutiveFailuresAtStop:
+      stopReason === "consecutive-failures" ? consecutiveFailures : undefined,
+  };
 }
 
 async function runBurstMode(
@@ -1176,7 +1315,22 @@ function printResults(
 
 function generateHtmlReport(data: TestData): string {
   const { steadyResults, burstResults, config: testConfig } = data;
-  const { mode, rates, duration, burstSizes, batchesPerBurst } = testConfig;
+  const {
+    mode,
+    rate,
+    rates,
+    duration,
+    burstSizes,
+    batchesPerBurst,
+    maxDuration,
+    maxConsecutiveFailures,
+  } = testConfig;
+
+  // Detect timeline mode: single steady result with timeline data
+  const isTimelineMode =
+    steadyResults.length === 1 &&
+    steadyResults[0].timeline &&
+    steadyResults[0].timeline.length > 0;
 
   const allResults = [...steadyResults, ...burstResults];
   const totalRequests = allResults.reduce((a, r) => a + r.requests.total, 0);
@@ -1382,6 +1536,14 @@ function generateHtmlReport(data: TestData): string {
       max-height: 100px;
       overflow-y: auto;
     }
+    .stop-reason {
+      padding: 0.25rem 0.5rem;
+      border-radius: 3px;
+      font-weight: bold;
+    }
+    .stop-reason-completed { background: var(--success); color: black; }
+    .stop-reason-duration { background: var(--warning); color: black; }
+    .stop-reason-consecutive-failures { background: var(--error); color: white; }
     details { margin-bottom: 0.5rem; }
     summary { cursor: pointer; padding: 0.5rem 0; }
     summary:hover { color: var(--accent); }
@@ -1427,6 +1589,18 @@ function generateHtmlReport(data: TestData): string {
     </div>
 
     <h2>Configuration</h2>
+    ${
+      isTimelineMode
+        ? `
+    <ul class="config-list">
+      <li><strong>Mode:</strong> steady</li>
+      <li><strong>Rate:</strong> ${rate} requests/min</li>
+      ${maxDuration ? `<li><strong>Max Duration:</strong> ${maxDuration}s</li>` : ""}
+      ${maxConsecutiveFailures ? `<li><strong>Max Consecutive Failures:</strong> ${maxConsecutiveFailures}</li>` : ""}
+      <li><strong>Stop Reason:</strong> <span class="stop-reason stop-reason-${steadyResults[0].stopReason}">${steadyResults[0].stopReason === "consecutive-failures" ? `Consecutive failures (${steadyResults[0].consecutiveFailuresAtStop})` : steadyResults[0].stopReason === "duration" ? "Max duration reached" : "Completed"}</span></li>
+    </ul>
+    `
+        : `
     <ul class="config-list">
       <li><strong>Mode:</strong> ${mode}</li>
       <li><strong>Steady Rates:</strong> ${rates.join(", ")} requests/min</li>
@@ -1434,10 +1608,61 @@ function generateHtmlReport(data: TestData): string {
       <li><strong>Burst Sizes:</strong> ${burstSizes.join(", ")}</li>
       <li><strong>Batches per Burst:</strong> ${batchesPerBurst}</li>
     </ul>
+    `
+    }
 
     ${
-      steadyResults.length > 0
+      isTimelineMode
         ? `
+    <h2>Timeline</h2>
+    <p style="color: var(--text-muted); margin-bottom: 1rem;">
+      Response time for each request over time. Green = success, Red = failure.
+    </p>
+
+    <div class="chart-container" style="max-width: 100%; height: 400px;">
+      <canvas id="timelineChart"></canvas>
+    </div>
+
+    <h3>Summary Statistics</h3>
+    <table>
+      <thead>
+        <tr>
+          <th>Metric</th>
+          <th>Success</th>
+          <th>Failure</th>
+        </tr>
+      </thead>
+      <tbody>
+        <tr>
+          <td>Count</td>
+          <td>${steadyResults[0].requests.success}</td>
+          <td>${steadyResults[0].requests.failed}</td>
+        </tr>
+        <tr>
+          <td>Latency p50</td>
+          <td>${steadyResults[0].successLatency ? formatDuration(steadyResults[0].successLatency.p50) : "N/A"}</td>
+          <td>${steadyResults[0].failureLatency ? formatDuration(steadyResults[0].failureLatency.p50) : "N/A"}</td>
+        </tr>
+        <tr>
+          <td>Latency p95</td>
+          <td>${steadyResults[0].successLatency ? formatDuration(steadyResults[0].successLatency.p95) : "N/A"}</td>
+          <td>${steadyResults[0].failureLatency ? formatDuration(steadyResults[0].failureLatency.p95) : "N/A"}</td>
+        </tr>
+        <tr>
+          <td>TACo Time p50</td>
+          <td>${steadyResults[0].successTacoSigningTime ? formatDuration(steadyResults[0].successTacoSigningTime.p50) : "N/A"}</td>
+          <td>${steadyResults[0].failureTacoSigningTime ? formatDuration(steadyResults[0].failureTacoSigningTime.p50) : "N/A"}</td>
+        </tr>
+        <tr>
+          <td>TACo Time p95</td>
+          <td>${steadyResults[0].successTacoSigningTime ? formatDuration(steadyResults[0].successTacoSigningTime.p95) : "N/A"}</td>
+          <td>${steadyResults[0].failureTacoSigningTime ? formatDuration(steadyResults[0].failureTacoSigningTime.p95) : "N/A"}</td>
+        </tr>
+      </tbody>
+    </table>
+    `
+        : steadyResults.length > 0
+          ? `
     <h2>Steady Rate Tests</h2>
     <p style="color: var(--text-muted); margin-bottom: 1rem;">
       Tests sustained load by firing requests at fixed intervals. At higher rates, more requests will be in-flight concurrently
@@ -1487,7 +1712,7 @@ function generateHtmlReport(data: TestData): string {
       </tbody>
     </table>
     `
-        : ""
+          : ""
     }
 
     ${
@@ -1742,6 +1967,21 @@ ${perTestSections}
   </div>
 
   <script>
+    const isTimelineMode = ${isTimelineMode};
+    const timelineData = ${JSON.stringify(
+      isTimelineMode && steadyResults[0].timeline
+        ? steadyResults[0].timeline.map((t) => ({
+            x: t.elapsedSec,
+            y: t.duration / 1000,
+            success: t.success,
+            error: t.error,
+            tacoTime: t.tacoSigningTimeMs ? t.tacoSigningTimeMs / 1000 : null,
+          }))
+        : [],
+    )};
+    const timelineP50 = ${isTimelineMode && steadyResults[0].latency ? steadyResults[0].latency.p50 / 1000 : "null"};
+    const timelineP95 = ${isTimelineMode && steadyResults[0].latency ? steadyResults[0].latency.p95 / 1000 : "null"};
+
     const steadyData = ${JSON.stringify(
       steadyResults.map((r) => ({
         rate: r.targetRate,
@@ -1831,8 +2071,112 @@ ${perTestSections}
       },
     };
 
+    // Timeline Chart (for steady mode with stop conditions)
+    if (isTimelineMode && timelineData.length > 0) {
+      const successData = timelineData.filter(d => d.success);
+      const failureData = timelineData.filter(d => !d.success);
+
+      new Chart(document.getElementById('timelineChart'), {
+        type: 'scatter',
+        data: {
+          datasets: [
+            {
+              label: 'Success',
+              data: successData,
+              backgroundColor: '#96FF5E',
+              borderColor: '#96FF5E',
+              pointRadius: 6,
+              pointHoverRadius: 8,
+            },
+            {
+              label: 'Failure',
+              data: failureData,
+              backgroundColor: '#ef5350',
+              borderColor: '#ef5350',
+              pointRadius: 6,
+              pointHoverRadius: 8,
+            },
+          ],
+        },
+        options: {
+          ...commonOptions,
+          plugins: {
+            ...commonOptions.plugins,
+            title: { ...commonOptions.plugins.title, text: 'Response Time Over Time' },
+            tooltip: {
+              ...commonOptions.plugins.tooltip,
+              callbacks: {
+                title: (items) => 'Time: ' + items[0].parsed.x.toFixed(1) + 's',
+                label: (ctx) => {
+                  const d = ctx.raw;
+                  const lines = [
+                    ctx.dataset.label + ': ' + d.y.toFixed(2) + 's',
+                  ];
+                  if (d.tacoTime) {
+                    lines.push('TACo: ' + d.tacoTime.toFixed(2) + 's');
+                  }
+                  if (d.error) {
+                    lines.push('Error: ' + d.error.slice(0, 50));
+                  }
+                  return lines;
+                },
+              },
+            },
+            annotation: timelineP50 ? {
+              annotations: {
+                p50Line: {
+                  type: 'line',
+                  yMin: timelineP50,
+                  yMax: timelineP50,
+                  borderColor: 'rgba(150, 255, 94, 0.5)',
+                  borderWidth: 2,
+                  borderDash: [5, 5],
+                  label: {
+                    display: true,
+                    content: 'p50: ' + timelineP50.toFixed(1) + 's',
+                    position: 'start',
+                    backgroundColor: 'rgba(0,0,0,0.7)',
+                    color: '#96FF5E',
+                  },
+                },
+                p95Line: {
+                  type: 'line',
+                  yMin: timelineP95,
+                  yMax: timelineP95,
+                  borderColor: 'rgba(255, 167, 38, 0.5)',
+                  borderWidth: 2,
+                  borderDash: [5, 5],
+                  label: {
+                    display: true,
+                    content: 'p95: ' + timelineP95.toFixed(1) + 's',
+                    position: 'start',
+                    backgroundColor: 'rgba(0,0,0,0.7)',
+                    color: '#ffa726',
+                  },
+                },
+              },
+            } : {},
+          },
+          scales: {
+            x: {
+              ...commonOptions.scales.x,
+              type: 'linear',
+              title: { ...commonOptions.scales.x.title, text: 'Elapsed Time (seconds)' },
+              ticks: { ...commonOptions.scales.x.ticks, callback: (v) => v + 's' },
+            },
+            y: {
+              ...commonOptions.scales.y,
+              beginAtZero: true,
+              title: { ...commonOptions.scales.y.title, text: 'Response Time (seconds)' },
+              ticks: { ...commonOptions.scales.y.ticks, callback: (v) => v + 's' },
+            },
+          },
+        },
+      });
+    }
+
     // Steady Rate Charts
-    if (steadyData.length > 0) {
+    if (steadyData.length > 0 && !isTimelineMode) {
       // Success Rate Chart
       new Chart(document.getElementById('steadySuccessChart'), {
         type: 'line',
@@ -2217,12 +2561,15 @@ Options:
   --duration=<sec>    Duration per rate level for steady mode (default: 60)
   --requests=<n>      Fixed request count (overrides duration)
   --rates=<list>      Comma-separated rates for sweep mode steady tests
+  --max-duration=<s>  Max test duration in seconds (steady mode stop condition)
+  --max-failures=<n>  Max consecutive failures before stopping (steady mode stop condition)
   --output=<file>     Custom output path for report (default: stress-test-results/reports/)
   --from-data=<file>  Generate report from existing test data JSON file
   --regenerate        Generate report from the most recent test data
 
 Modes:
   steady    Fire requests at a fixed rate (e.g., 1 request/sec = 1 request every 1s)
+            With --max-duration or --max-failures, generates a timeline report
   burst     Fire N requests simultaneously, wait for all to complete, repeat
   sweep     Run all steady rate tests, then all burst size tests (recommended)
 
@@ -2240,6 +2587,9 @@ Examples:
 
   # Run a specific test
   npx tsx scripts/stress-test.ts --config=stress-test.config.yml --mode=steady --rate=5 --duration=120
+
+  # Run steady mode with stop conditions (generates timeline report)
+  npx tsx scripts/stress-test.ts --config=stress-test.config.yml --rate=6 --max-duration=300 --max-failures=5
 
   # Regenerate report from saved data
   npx tsx scripts/stress-test.ts --regenerate
@@ -2259,6 +2609,8 @@ Examples:
     batchesPerBurst,
     cooldown,
     timeout,
+    maxDuration,
+    maxConsecutiveFailures,
     output,
   } = loadConfig(cliOptions);
 
@@ -2296,13 +2648,14 @@ Examples:
       console.log(`\n${"─".repeat(60)}`);
       console.log(`Steady @ ${testRate} requests/min`);
       console.log("─".repeat(60));
-      const results = await runSteadyMode(
-        preparedPayloads,
-        testRate,
+      const steadyResult = await runSteadyMode(preparedPayloads, {
+        rate: testRate,
         duration,
-        requests,
+        requestCount: requests,
+      });
+      steadyResults.push(
+        printResults(steadyResult.results, "steady", testRate),
       );
-      steadyResults.push(printResults(results, "steady", testRate));
 
       if (testRate !== rates[rates.length - 1]) {
         console.log(
@@ -2388,20 +2741,36 @@ Examples:
     );
     burstResults.push(printResults(results, "burst", burstSize));
   } else {
-    const results = await runSteadyMode(
-      preparedPayloads,
+    const steadyResult = await runSteadyMode(preparedPayloads, {
       rate,
       duration,
-      requests,
-    );
-    steadyResults.push(printResults(results, "steady", rate));
+      requestCount: requests,
+      maxDuration,
+      maxConsecutiveFailures,
+    });
+    const runResult = printResults(steadyResult.results, "steady", rate);
+    // Add timeline data for steady mode reports
+    runResult.timeline = steadyResult.timeline;
+    runResult.stopReason = steadyResult.stopReason;
+    runResult.consecutiveFailuresAtStop =
+      steadyResult.consecutiveFailuresAtStop;
+    steadyResults.push(runResult);
   }
 
   // Save test data (always)
   const testData: TestData = {
     version: 1,
     timestamp: new Date().toISOString(),
-    config: { mode, rate, duration, rates, burstSizes, batchesPerBurst },
+    config: {
+      mode,
+      rate,
+      duration,
+      rates,
+      burstSizes,
+      batchesPerBurst,
+      maxDuration,
+      maxConsecutiveFailures,
+    },
     steadyResults,
     burstResults,
   };
