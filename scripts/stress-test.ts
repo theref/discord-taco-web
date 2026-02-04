@@ -230,7 +230,7 @@ interface Stats {
 
 interface RunResult {
   mode: "steady" | "burst";
-  // For steady mode: target requests per second
+  // For steady mode: target requests per minute
   // For burst mode: burst size (concurrent requests per batch)
   targetRate: number;
   duration: number;
@@ -800,13 +800,13 @@ async function runSteadyMode(
   duration: number,
   requestCount?: number,
 ): Promise<RequestResult[]> {
-  const intervalMs = 1000 / rate;
-  const totalRequests = requestCount ?? Math.floor(duration * rate);
+  const intervalMs = 60000 / rate; // rate is requests per minute
+  const totalRequests = requestCount ?? Math.floor((duration / 60) * rate);
   let payloadIndex = 0;
   let completedCount = 0;
 
   console.log(
-    `[stress-test] Starting steady mode: ${rate} requests/sec, ${totalRequests} total requests`,
+    `[stress-test] Starting steady mode: ${rate} requests/min, ${totalRequests} total requests`,
   );
 
   const startTime = Date.now();
@@ -958,7 +958,7 @@ function printResults(
   console.log("=".repeat(60));
   console.log();
   const modeLabel =
-    mode === "burst" ? `Burst size: ${rate}` : `Rate: ${rate} requests/sec`;
+    mode === "burst" ? `Burst size: ${rate}` : `Rate: ${rate} requests/min`;
   console.log(
     `Mode: ${mode} | ${modeLabel} | Duration: ${totalDuration.toFixed(1)}s`,
   );
@@ -1039,7 +1039,7 @@ function generateHtmlReport(data: TestData): string {
   for (const r of steadyResults) {
     if (r.errors.length > 0) {
       allErrors.push({
-        source: `Steady @ ${r.targetRate} requests/sec`,
+        source: `Steady @ ${r.targetRate} requests/min`,
         errors: r.errors,
       });
     }
@@ -1267,7 +1267,7 @@ function generateHtmlReport(data: TestData): string {
     <h2>Configuration</h2>
     <ul class="config-list">
       <li><strong>Mode:</strong> ${mode}</li>
-      <li><strong>Steady Rates:</strong> ${rates.join(", ")} requests/sec</li>
+      <li><strong>Steady Rates:</strong> ${rates.join(", ")} requests/min</li>
       <li><strong>Duration per Rate:</strong> ${duration}s</li>
       <li><strong>Burst Sizes:</strong> ${burstSizes.join(", ")}</li>
       <li><strong>Batches per Burst:</strong> ${batchesPerBurst}</li>
@@ -1555,7 +1555,7 @@ function generateHtmlReport(data: TestData): string {
           scales: {
             x: {
               ...commonOptions.scales.x,
-              title: { ...commonOptions.scales.x.title, text: 'Request Rate (requests/sec)' },
+              title: { ...commonOptions.scales.x.title, text: 'Request Rate (requests/min)' },
             },
             y: {
               ...commonOptions.scales.y,
@@ -1620,7 +1620,7 @@ function generateHtmlReport(data: TestData): string {
           scales: {
             x: {
               ...commonOptions.scales.x,
-              title: { ...commonOptions.scales.x.title, text: 'Request Rate (requests/sec)' },
+              title: { ...commonOptions.scales.x.title, text: 'Request Rate (requests/min)' },
             },
             y: {
               ...commonOptions.scales.y,
@@ -1820,7 +1820,7 @@ Usage:
 Options:
   --config=<file>     Config file with payloads and defaults (required for running tests)
   --mode=<mode>       steady, burst, or sweep (default: steady)
-  --rate=<n>          Requests per second for steady / burst size for burst (default: 1)
+  --rate=<n>          Requests per minute for steady / burst size for burst (default: 1)
   --duration=<sec>    Duration per rate level for steady mode (default: 60)
   --requests=<n>      Fixed request count (overrides duration)
   --rates=<list>      Comma-separated rates for sweep mode steady tests
@@ -1880,7 +1880,7 @@ Examples:
 
   if (mode === "sweep") {
     console.log(`\n[stress-test] Starting sweep mode`);
-    console.log(`[stress-test] Steady rates: ${rates.join(", ")} requests/sec`);
+    console.log(`[stress-test] Steady rates: ${rates.join(", ")} requests/min`);
     console.log(`[stress-test] Burst sizes: ${burstSizes.join(", ")}`);
     console.log(`[stress-test] Duration per steady rate: ${duration}s`);
     console.log(`[stress-test] Batches per burst size: ${batchesPerBurst}\n`);
@@ -1892,7 +1892,7 @@ Examples:
 
     for (const testRate of rates) {
       console.log(`\n${"─".repeat(60)}`);
-      console.log(`Steady @ ${testRate} requests/sec`);
+      console.log(`Steady @ ${testRate} requests/min`);
       console.log("─".repeat(60));
       const results = await runSteadyMode(
         config.payloads,
