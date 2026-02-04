@@ -1,0 +1,377 @@
+{
+  "version": 1,
+  "timestamp": "2026-02-04T15:05:14.376Z",
+  "config": {
+    "mode": "sweep",
+    "rate": 3,
+    "duration": 30,
+    "rates": [
+      3,
+      6,
+      30,
+      60
+    ],
+    "burstSizes": [
+      3,
+      5,
+      10
+    ],
+    "batchesPerBurst": 1
+  },
+  "steadyResults": [
+    {
+      "mode": "steady",
+      "targetRate": 3,
+      "duration": 10.6,
+      "requests": {
+        "total": 1,
+        "success": 1,
+        "failed": 0
+      },
+      "latency": {
+        "min": 10566,
+        "max": 10566,
+        "mean": 10566,
+        "p50": 10566,
+        "p95": 10566,
+        "p99": 10566,
+        "stdDev": 0
+      },
+      "successLatency": {
+        "min": 10566,
+        "max": 10566,
+        "mean": 10566,
+        "p50": 10566,
+        "p95": 10566,
+        "p99": 10566,
+        "stdDev": 0
+      },
+      "failureLatency": null,
+      "tacoSigningTime": {
+        "min": 9782,
+        "max": 9782,
+        "mean": 9782,
+        "p50": 9782,
+        "p95": 9782,
+        "p99": 9782,
+        "stdDev": 0
+      },
+      "successTacoSigningTime": {
+        "min": 9782,
+        "max": 9782,
+        "mean": 9782,
+        "p50": 9782,
+        "p95": 9782,
+        "p99": 9782,
+        "stdDev": 0
+      },
+      "failureTacoSigningTime": null,
+      "nodeFailures": [],
+      "errors": []
+    },
+    {
+      "mode": "steady",
+      "targetRate": 6,
+      "duration": 30.6,
+      "requests": {
+        "total": 3,
+        "success": 3,
+        "failed": 0
+      },
+      "latency": {
+        "min": 10567,
+        "max": 11004,
+        "mean": 10843,
+        "p50": 10957,
+        "p95": 11004,
+        "p99": 11004,
+        "stdDev": 196
+      },
+      "successLatency": {
+        "min": 10567,
+        "max": 11004,
+        "mean": 10843,
+        "p50": 10957,
+        "p95": 11004,
+        "p99": 11004,
+        "stdDev": 196
+      },
+      "failureLatency": null,
+      "tacoSigningTime": {
+        "min": 9770,
+        "max": 10214,
+        "mean": 10044,
+        "p50": 10148,
+        "p95": 10214,
+        "p99": 10214,
+        "stdDev": 196
+      },
+      "successTacoSigningTime": {
+        "min": 9770,
+        "max": 10214,
+        "mean": 10044,
+        "p50": 10148,
+        "p95": 10214,
+        "p99": 10214,
+        "stdDev": 196
+      },
+      "failureTacoSigningTime": null,
+      "nodeFailures": [],
+      "errors": []
+    },
+    {
+      "mode": "steady",
+      "targetRate": 30,
+      "duration": 55,
+      "requests": {
+        "total": 15,
+        "success": 15,
+        "failed": 0
+      },
+      "latency": {
+        "min": 12985,
+        "max": 38316,
+        "mean": 28100,
+        "p50": 28816,
+        "p95": 38316,
+        "p99": 38316,
+        "stdDev": 7261
+      },
+      "successLatency": {
+        "min": 12985,
+        "max": 38316,
+        "mean": 28100,
+        "p50": 28816,
+        "p95": 38316,
+        "p99": 38316,
+        "stdDev": 7261
+      },
+      "failureLatency": null,
+      "tacoSigningTime": {
+        "min": 12240,
+        "max": 37659,
+        "mean": 27449,
+        "p50": 28190,
+        "p95": 37659,
+        "p99": 37659,
+        "stdDev": 7298
+      },
+      "successTacoSigningTime": {
+        "min": 12240,
+        "max": 37659,
+        "mean": 27449,
+        "p50": 28190,
+        "p95": 37659,
+        "p99": 37659,
+        "stdDev": 7298
+      },
+      "failureTacoSigningTime": null,
+      "nodeFailures": [],
+      "errors": []
+    },
+    {
+      "mode": "steady",
+      "targetRate": 60,
+      "duration": 91.7,
+      "requests": {
+        "total": 30,
+        "success": 5,
+        "failed": 25
+      },
+      "latency": {
+        "min": 34824,
+        "max": 63747,
+        "mean": 60368,
+        "p50": 62781,
+        "p95": 63327,
+        "p99": 63747,
+        "stdDev": 6568
+      },
+      "successLatency": {
+        "min": 34824,
+        "max": 56389,
+        "mean": 47684,
+        "p50": 49992,
+        "p95": 56389,
+        "p99": 56389,
+        "stdDev": 8089
+      },
+      "failureLatency": {
+        "min": 62617,
+        "max": 63747,
+        "mean": 62905,
+        "p50": 62823,
+        "p95": 63327,
+        "p99": 63747,
+        "stdDev": 256
+      },
+      "tacoSigningTime": {
+        "min": 34085,
+        "max": 55656,
+        "mean": 47010,
+        "p50": 49391,
+        "p95": 55656,
+        "p99": 55656,
+        "stdDev": 8110
+      },
+      "successTacoSigningTime": {
+        "min": 34085,
+        "max": 55656,
+        "mean": 47010,
+        "p50": 49391,
+        "p95": 55656,
+        "p99": 55656,
+        "stdDev": 8110
+      },
+      "failureTacoSigningTime": null,
+      "nodeFailures": [],
+      "errors": [
+        {
+          "message": "[taco-signing] Request failed with status code 504",
+          "count": 25
+        }
+      ]
+    }
+  ],
+  "burstResults": [
+    {
+      "mode": "burst",
+      "targetRate": 3,
+      "duration": 16.9,
+      "requests": {
+        "total": 3,
+        "success": 3,
+        "failed": 0
+      },
+      "latency": {
+        "min": 16171,
+        "max": 16927,
+        "mean": 16470,
+        "p50": 16311,
+        "p95": 16927,
+        "p99": 16927,
+        "stdDev": 328
+      },
+      "successLatency": {
+        "min": 16171,
+        "max": 16927,
+        "mean": 16470,
+        "p50": 16311,
+        "p95": 16927,
+        "p99": 16927,
+        "stdDev": 328
+      },
+      "failureLatency": null,
+      "tacoSigningTime": {
+        "min": 14821,
+        "max": 15605,
+        "mean": 15270,
+        "p50": 15385,
+        "p95": 15605,
+        "p99": 15605,
+        "stdDev": 330
+      },
+      "successTacoSigningTime": {
+        "min": 14821,
+        "max": 15605,
+        "mean": 15270,
+        "p50": 15385,
+        "p95": 15605,
+        "p99": 15605,
+        "stdDev": 330
+      },
+      "failureTacoSigningTime": null,
+      "nodeFailures": [],
+      "errors": []
+    },
+    {
+      "mode": "burst",
+      "targetRate": 5,
+      "duration": 9.5,
+      "requests": {
+        "total": 5,
+        "success": 0,
+        "failed": 5
+      },
+      "latency": {
+        "min": 9526,
+        "max": 9547,
+        "mean": 9531,
+        "p50": 9528,
+        "p95": 9547,
+        "p99": 9547,
+        "stdDev": 8
+      },
+      "successLatency": null,
+      "failureLatency": {
+        "min": 9526,
+        "max": 9547,
+        "mean": 9531,
+        "p50": 9528,
+        "p95": 9547,
+        "p99": 9547,
+        "stdDev": 8
+      },
+      "tacoSigningTime": null,
+      "successTacoSigningTime": null,
+      "failureTacoSigningTime": null,
+      "nodeFailures": [],
+      "errors": [
+        {
+          "message": "[prepare-userop] HTTP request failed.\n\nStatus: 408\nURL: https://base-sepolia.drpc.org/\nRequest body: {\"method\":\"eth_call\",\"params\":[{\"data\":\"0x35567e1a000000000000000000000000420acfa51fdb2821dfb407e212a882144807737c0000000000000000000000000000000000000000000000000000000000000000\",\"to\":\"0x0000000071727De22E5E9d8BAf0edAc6f37da032\"},\"latest\"]}\n \nRaw Call Arguments:\n  to:    0x0000000071727De22E5E9d8BAf0edAc6f37da032\n  data:  0x35567e1a000000000000000000000000420acfa51fdb2821dfb407e212a882144807737c0000000000000000000000000000000000000000000000000000000000000000\n \nContract Call:\n  address:   0x0000000071727De22E5E9d8BAf0edAc6f37da032\n  function:  getNonce(address sender, uint192 key)\n  args:              (0x420AcFa51fdB2821dFb407e212A882144807737C, 0)\n\nDocs: https://viem.sh/docs/contract/readContract\nDetails: {\"message\":\"Request timeout on the free tier, please upgrade your tier to the paid one\",\"code\":30}\nVersion: viem@2.45.1",
+          "count": 5
+        }
+      ]
+    },
+    {
+      "mode": "burst",
+      "targetRate": 10,
+      "duration": 39.5,
+      "requests": {
+        "total": 10,
+        "success": 10,
+        "failed": 0
+      },
+      "latency": {
+        "min": 37295,
+        "max": 39455,
+        "mean": 38890,
+        "p50": 39086,
+        "p95": 39455,
+        "p99": 39455,
+        "stdDev": 613
+      },
+      "successLatency": {
+        "min": 37295,
+        "max": 39455,
+        "mean": 38890,
+        "p50": 39086,
+        "p95": 39455,
+        "p99": 39455,
+        "stdDev": 613
+      },
+      "failureLatency": null,
+      "tacoSigningTime": {
+        "min": 36532,
+        "max": 38619,
+        "mean": 38089,
+        "p50": 38261,
+        "p95": 38619,
+        "p99": 38619,
+        "stdDev": 595
+      },
+      "successTacoSigningTime": {
+        "min": 36532,
+        "max": 38619,
+        "mean": 38089,
+        "p50": 38261,
+        "p95": 38619,
+        "p99": 38619,
+        "stdDev": 595
+      },
+      "failureTacoSigningTime": null,
+      "nodeFailures": [],
+      "errors": []
+    }
+  ]
+}
