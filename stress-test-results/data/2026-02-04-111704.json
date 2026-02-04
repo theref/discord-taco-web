@@ -1,0 +1,511 @@
+{
+  "version": 1,
+  "timestamp": "2026-02-04T11:17:04.109Z",
+  "config": {
+    "mode": "sweep",
+    "rate": 3,
+    "duration": 60,
+    "rates": [
+      3,
+      6,
+      30,
+      60
+    ],
+    "burstSizes": [
+      3,
+      5,
+      10
+    ],
+    "batchesPerBurst": 1
+  },
+  "steadyResults": [
+    {
+      "mode": "steady",
+      "targetRate": 3,
+      "duration": 51.8,
+      "requests": {
+        "total": 3,
+        "success": 3,
+        "failed": 0
+      },
+      "latency": {
+        "min": 10875,
+        "max": 14039,
+        "mean": 12227,
+        "p50": 11767,
+        "p95": 14039,
+        "p99": 14039,
+        "stdDev": 1332
+      },
+      "successLatency": {
+        "min": 10875,
+        "max": 14039,
+        "mean": 12227,
+        "p50": 11767,
+        "p95": 14039,
+        "p99": 14039,
+        "stdDev": 1332
+      },
+      "failureLatency": null,
+      "tacoSigningTime": {
+        "min": 10874,
+        "max": 14039,
+        "mean": 12227,
+        "p50": 11767,
+        "p95": 14039,
+        "p99": 14039,
+        "stdDev": 1332
+      },
+      "successTacoSigningTime": {
+        "min": 10874,
+        "max": 14039,
+        "mean": 12227,
+        "p50": 11767,
+        "p95": 14039,
+        "p99": 14039,
+        "stdDev": 1332
+      },
+      "failureTacoSigningTime": null,
+      "errors": [],
+      "errorAnalysis": null
+    },
+    {
+      "mode": "steady",
+      "targetRate": 6,
+      "duration": 60.2,
+      "requests": {
+        "total": 6,
+        "success": 6,
+        "failed": 0
+      },
+      "latency": {
+        "min": 10179,
+        "max": 11363,
+        "mean": 10606,
+        "p50": 10481,
+        "p95": 11363,
+        "p99": 11363,
+        "stdDev": 393
+      },
+      "successLatency": {
+        "min": 10179,
+        "max": 11363,
+        "mean": 10606,
+        "p50": 10481,
+        "p95": 11363,
+        "p99": 11363,
+        "stdDev": 393
+      },
+      "failureLatency": null,
+      "tacoSigningTime": {
+        "min": 10179,
+        "max": 11363,
+        "mean": 10606,
+        "p50": 10481,
+        "p95": 11363,
+        "p99": 11363,
+        "stdDev": 393
+      },
+      "successTacoSigningTime": {
+        "min": 10179,
+        "max": 11363,
+        "mean": 10606,
+        "p50": 10481,
+        "p95": 11363,
+        "p99": 11363,
+        "stdDev": 393
+      },
+      "failureTacoSigningTime": null,
+      "errors": [],
+      "errorAnalysis": null
+    },
+    {
+      "mode": "steady",
+      "targetRate": 30,
+      "duration": 90.1,
+      "requests": {
+        "total": 30,
+        "success": 7,
+        "failed": 23
+      },
+      "latency": {
+        "min": 10633,
+        "max": 33166,
+        "mean": 29427,
+        "p50": 32125,
+        "p95": 32576,
+        "p99": 33166,
+        "stdDev": 6094
+      },
+      "successLatency": {
+        "min": 10633,
+        "max": 31004,
+        "mean": 20221,
+        "p50": 19420,
+        "p95": 31004,
+        "p99": 31004,
+        "stdDev": 6959
+      },
+      "failureLatency": {
+        "min": 32053,
+        "max": 33166,
+        "mean": 32229,
+        "p50": 32138,
+        "p95": 32576,
+        "p99": 33166,
+        "stdDev": 241
+      },
+      "tacoSigningTime": {
+        "min": 10632,
+        "max": 31004,
+        "mean": 20221,
+        "p50": 19420,
+        "p95": 31004,
+        "p99": 31004,
+        "stdDev": 6959
+      },
+      "successTacoSigningTime": {
+        "min": 10632,
+        "max": 31004,
+        "mean": 20221,
+        "p50": 19420,
+        "p95": 31004,
+        "p99": 31004,
+        "stdDev": 6959
+      },
+      "failureTacoSigningTime": null,
+      "errors": [
+        "[taco-signing] Threshold of signatures not met; TACo signing failed with errors: {\"0x48C8039c32F4c6f5cb206A5911C8Ae814929C16B\":\"Node 0x48C8039c32F4c6f5cb206A5911C8Ae814929C16B did not respond before timeout (30s).\",\"0xb15d5A4e2be34f4bE154A1b08a94Ab920FfD8A41\":\"Node 0xb15d5A4e2be34f4bE154A1b08a94Ab920FfD8A41 did not respond before timeout (30s).\",\"0x210eeAC07542F815ebB6FD6689637D8cA2689392\":\"Node 0x210eeAC07542F815ebB6FD6689637D8cA2689392 did not respond before timeout (30s).\"}",
+        "[taco-signing] Threshold of signatures not met; TACo signing failed with errors: {\"0xb15d5A4e2be34f4bE154A1b08a94Ab920FfD8A41\":\"Node 0xb15d5A4e2be34f4bE154A1b08a94Ab920FfD8A41 did not respond before timeout (30s).\",\"0x210eeAC07542F815ebB6FD6689637D8cA2689392\":\"Node 0x210eeAC07542F815ebB6FD6689637D8cA2689392 did not respond before timeout (30s).\",\"0x48C8039c32F4c6f5cb206A5911C8Ae814929C16B\":\"Node 0x48C8039c32F4c6f5cb206A5911C8Ae814929C16B did not respond before timeout (30s).\"}",
+        "[taco-signing] Threshold of signatures not met; TACo signing failed with errors: {\"0x210eeAC07542F815ebB6FD6689637D8cA2689392\":\"Node 0x210eeAC07542F815ebB6FD6689637D8cA2689392 did not respond before timeout (30s).\",\"0x48C8039c32F4c6f5cb206A5911C8Ae814929C16B\":\"Node 0x48C8039c32F4c6f5cb206A5911C8Ae814929C16B did not respond before timeout (30s).\",\"0xb15d5A4e2be34f4bE154A1b08a94Ab920FfD8A41\":\"Node 0xb15d5A4e2be34f4bE154A1b08a94Ab920FfD8A41 did not respond before timeout (30s).\"}",
+        "[taco-signing] Threshold of signatures not met; TACo signing failed with errors: {\"0x210eeAC07542F815ebB6FD6689637D8cA2689392\":\"Node 0x210eeAC07542F815ebB6FD6689637D8cA2689392 did not respond before timeout (30s).\",\"0xb15d5A4e2be34f4bE154A1b08a94Ab920FfD8A41\":\"Node 0xb15d5A4e2be34f4bE154A1b08a94Ab920FfD8A41 did not respond before timeout (30s).\",\"0x48C8039c32F4c6f5cb206A5911C8Ae814929C16B\":\"Node 0x48C8039c32F4c6f5cb206A5911C8Ae814929C16B did not respond before timeout (30s).\"}",
+        "[taco-signing] Threshold of signatures not met; TACo signing failed with errors: {\"0x48C8039c32F4c6f5cb206A5911C8Ae814929C16B\":\"Node 0x48C8039c32F4c6f5cb206A5911C8Ae814929C16B did not respond before timeout (30s).\",\"0x210eeAC07542F815ebB6FD6689637D8cA2689392\":\"Node 0x210eeAC07542F815ebB6FD6689637D8cA2689392 did not respond before timeout (30s).\",\"0xb15d5A4e2be34f4bE154A1b08a94Ab920FfD8A41\":\"Node 0xb15d5A4e2be34f4bE154A1b08a94Ab920FfD8A41 did not respond before timeout (30s).\"}"
+      ],
+      "errorAnalysis": {
+        "totalFailures": 23,
+        "thresholdNotMet": 23,
+        "timeoutFailures": 69,
+        "otherFailures": 0,
+        "nodeErrors": [
+          {
+            "nodeAddress": "0x48C8039c32F4c6f5cb206A5911C8Ae814929C16B",
+            "timeouts": 23,
+            "otherErrors": 0,
+            "errorMessages": [
+              "Node 0x48C8039c32F4c6f5cb206A5911C8Ae814929C16B did not respond before timeout (30s)."
+            ]
+          },
+          {
+            "nodeAddress": "0xb15d5A4e2be34f4bE154A1b08a94Ab920FfD8A41",
+            "timeouts": 23,
+            "otherErrors": 0,
+            "errorMessages": [
+              "Node 0xb15d5A4e2be34f4bE154A1b08a94Ab920FfD8A41 did not respond before timeout (30s)."
+            ]
+          },
+          {
+            "nodeAddress": "0x210eeAC07542F815ebB6FD6689637D8cA2689392",
+            "timeouts": 23,
+            "otherErrors": 0,
+            "errorMessages": [
+              "Node 0x210eeAC07542F815ebB6FD6689637D8cA2689392 did not respond before timeout (30s)."
+            ]
+          }
+        ],
+        "rawErrors": [
+          "[taco-signing] Threshold of signatures not met; TACo signing failed with errors: {\"0x48C8039c32F4c6f5cb206A5911C8Ae814929C16B\":\"Node 0x48C8039c32F4c6f5cb206A5911C8Ae814929C16B did not respond before timeout (30s).\",\"0xb15d5A4e2be34f4bE154A1b08a94Ab920FfD8A41\":\"Node 0xb15d5A4e2be34f4bE154A1b08a94Ab920FfD8A41 did not respond before timeout (30s).\",\"0x210eeAC07542F815ebB6FD6689637D8cA2689392\":\"Node 0x210eeAC07542F815ebB6FD6689637D8cA2689392 did not respond before timeout (30s).\"}",
+          "[taco-signing] Threshold of signatures not met; TACo signing failed with errors: {\"0xb15d5A4e2be34f4bE154A1b08a94Ab920FfD8A41\":\"Node 0xb15d5A4e2be34f4bE154A1b08a94Ab920FfD8A41 did not respond before timeout (30s).\",\"0x210eeAC07542F815ebB6FD6689637D8cA2689392\":\"Node 0x210eeAC07542F815ebB6FD6689637D8cA2689392 did not respond before timeout (30s).\",\"0x48C8039c32F4c6f5cb206A5911C8Ae814929C16B\":\"Node 0x48C8039c32F4c6f5cb206A5911C8Ae814929C16B did not respond before timeout (30s).\"}",
+          "[taco-signing] Threshold of signatures not met; TACo signing failed with errors: {\"0x210eeAC07542F815ebB6FD6689637D8cA2689392\":\"Node 0x210eeAC07542F815ebB6FD6689637D8cA2689392 did not respond before timeout (30s).\",\"0x48C8039c32F4c6f5cb206A5911C8Ae814929C16B\":\"Node 0x48C8039c32F4c6f5cb206A5911C8Ae814929C16B did not respond before timeout (30s).\",\"0xb15d5A4e2be34f4bE154A1b08a94Ab920FfD8A41\":\"Node 0xb15d5A4e2be34f4bE154A1b08a94Ab920FfD8A41 did not respond before timeout (30s).\"}",
+          "[taco-signing] Threshold of signatures not met; TACo signing failed with errors: {\"0x210eeAC07542F815ebB6FD6689637D8cA2689392\":\"Node 0x210eeAC07542F815ebB6FD6689637D8cA2689392 did not respond before timeout (30s).\",\"0xb15d5A4e2be34f4bE154A1b08a94Ab920FfD8A41\":\"Node 0xb15d5A4e2be34f4bE154A1b08a94Ab920FfD8A41 did not respond before timeout (30s).\",\"0x48C8039c32F4c6f5cb206A5911C8Ae814929C16B\":\"Node 0x48C8039c32F4c6f5cb206A5911C8Ae814929C16B did not respond before timeout (30s).\"}",
+          "[taco-signing] Threshold of signatures not met; TACo signing failed with errors: {\"0x48C8039c32F4c6f5cb206A5911C8Ae814929C16B\":\"Node 0x48C8039c32F4c6f5cb206A5911C8Ae814929C16B did not respond before timeout (30s).\",\"0x210eeAC07542F815ebB6FD6689637D8cA2689392\":\"Node 0x210eeAC07542F815ebB6FD6689637D8cA2689392 did not respond before timeout (30s).\",\"0xb15d5A4e2be34f4bE154A1b08a94Ab920FfD8A41\":\"Node 0xb15d5A4e2be34f4bE154A1b08a94Ab920FfD8A41 did not respond before timeout (30s).\"}"
+        ]
+      }
+    },
+    {
+      "mode": "steady",
+      "targetRate": 60,
+      "duration": 91,
+      "requests": {
+        "total": 60,
+        "success": 0,
+        "failed": 60
+      },
+      "latency": {
+        "min": 31996,
+        "max": 33158,
+        "mean": 32277,
+        "p50": 32174,
+        "p95": 32875,
+        "p99": 33158,
+        "stdDev": 268
+      },
+      "successLatency": null,
+      "failureLatency": {
+        "min": 31996,
+        "max": 33158,
+        "mean": 32277,
+        "p50": 32174,
+        "p95": 32875,
+        "p99": 33158,
+        "stdDev": 268
+      },
+      "tacoSigningTime": null,
+      "successTacoSigningTime": null,
+      "failureTacoSigningTime": null,
+      "errors": [
+        "[taco-signing] Threshold of signatures not met; TACo signing failed with errors: {\"0x48C8039c32F4c6f5cb206A5911C8Ae814929C16B\":\"Node 0x48C8039c32F4c6f5cb206A5911C8Ae814929C16B did not respond before timeout (30s).\",\"0x210eeAC07542F815ebB6FD6689637D8cA2689392\":\"Node 0x210eeAC07542F815ebB6FD6689637D8cA2689392 did not respond before timeout (30s).\",\"0xb15d5A4e2be34f4bE154A1b08a94Ab920FfD8A41\":\"Node 0xb15d5A4e2be34f4bE154A1b08a94Ab920FfD8A41 did not respond before timeout (30s).\"}",
+        "[taco-signing] Threshold of signatures not met; TACo signing failed with errors: {\"0x48C8039c32F4c6f5cb206A5911C8Ae814929C16B\":\"Node 0x48C8039c32F4c6f5cb206A5911C8Ae814929C16B did not respond before timeout (30s).\",\"0xb15d5A4e2be34f4bE154A1b08a94Ab920FfD8A41\":\"Node 0xb15d5A4e2be34f4bE154A1b08a94Ab920FfD8A41 did not respond before timeout (30s).\",\"0x210eeAC07542F815ebB6FD6689637D8cA2689392\":\"Node 0x210eeAC07542F815ebB6FD6689637D8cA2689392 did not respond before timeout (30s).\"}",
+        "[taco-signing] Threshold of signatures not met; TACo signing failed with errors: {\"0xb15d5A4e2be34f4bE154A1b08a94Ab920FfD8A41\":\"Node 0xb15d5A4e2be34f4bE154A1b08a94Ab920FfD8A41 did not respond before timeout (30s).\",\"0x210eeAC07542F815ebB6FD6689637D8cA2689392\":\"Node 0x210eeAC07542F815ebB6FD6689637D8cA2689392 did not respond before timeout (30s).\",\"0x48C8039c32F4c6f5cb206A5911C8Ae814929C16B\":\"Node 0x48C8039c32F4c6f5cb206A5911C8Ae814929C16B did not respond before timeout (30s).\"}",
+        "[taco-signing] Threshold of signatures not met; TACo signing failed with errors: {\"0xb15d5A4e2be34f4bE154A1b08a94Ab920FfD8A41\":\"(<class 'nucypher.network.concurrency.SigningRequestClient.SigningRequestFailed'>, SigningRequestFailed(\\\"Node 0xb15d5A4e2be34f4bE154A1b08a94Ab920FfD8A41 raised HTTPSConnectionPool(host='167.71.226.39', port=9151): Read timed out. (read timeout=3.05)\\\"), <traceback object at 0x792d73fbe340>)\",\"0x210eeAC07542F815ebB6FD6689637D8cA2689392\":\"Node 0x210eeAC07542F815ebB6FD6689637D8cA2689392 did not respond before timeout (30s).\",\"0x48C8039c32F4c6f5cb206A5911C8Ae814929C16B\":\"Node 0x48C8039c32F4c6f5cb206A5911C8Ae814929C16B did not respond before timeout (30s).\"}",
+        "[taco-signing] Threshold of signatures not met; TACo signing failed with errors: {\"0xb15d5A4e2be34f4bE154A1b08a94Ab920FfD8A41\":\"(<class 'nucypher.network.concurrency.SigningRequestClient.SigningRequestFailed'>, SigningRequestFailed(\\\"Node 0xb15d5A4e2be34f4bE154A1b08a94Ab920FfD8A41 raised HTTPSConnectionPool(host='167.71.226.39', port=9151): Read timed out. (read timeout=3.05)\\\"), <traceback object at 0x792d72ca1900>)\",\"0x210eeAC07542F815ebB6FD6689637D8cA2689392\":\"Node 0x210eeAC07542F815ebB6FD6689637D8cA2689392 did not respond before timeout (30s).\",\"0x48C8039c32F4c6f5cb206A5911C8Ae814929C16B\":\"Node 0x48C8039c32F4c6f5cb206A5911C8Ae814929C16B did not respond before timeout (30s).\"}",
+        "[taco-signing] Threshold of signatures not met; TACo signing failed with errors: {\"0xb15d5A4e2be34f4bE154A1b08a94Ab920FfD8A41\":\"(<class 'nucypher.network.concurrency.SigningRequestClient.SigningRequestFailed'>, SigningRequestFailed(\\\"Node 0xb15d5A4e2be34f4bE154A1b08a94Ab920FfD8A41 raised HTTPSConnectionPool(host='167.71.226.39', port=9151): Read timed out. (read timeout=3.05)\\\"), <traceback object at 0x7d61a75ccb00>)\",\"0x210eeAC07542F815ebB6FD6689637D8cA2689392\":\"Node 0x210eeAC07542F815ebB6FD6689637D8cA2689392 did not respond before timeout (30s).\",\"0x48C8039c32F4c6f5cb206A5911C8Ae814929C16B\":\"Node 0x48C8039c32F4c6f5cb206A5911C8Ae814929C16B did not respond before timeout (30s).\"}",
+        "[taco-signing] Threshold of signatures not met; TACo signing failed with errors: {\"0xb15d5A4e2be34f4bE154A1b08a94Ab920FfD8A41\":\"(<class 'nucypher.network.concurrency.SigningRequestClient.SigningRequestFailed'>, SigningRequestFailed(\\\"Node 0xb15d5A4e2be34f4bE154A1b08a94Ab920FfD8A41 raised HTTPSConnectionPool(host='167.71.226.39', port=9151): Read timed out. (read timeout=3.05)\\\"), <traceback object at 0x7d61a75cfec0>)\",\"0x210eeAC07542F815ebB6FD6689637D8cA2689392\":\"Node 0x210eeAC07542F815ebB6FD6689637D8cA2689392 did not respond before timeout (30s).\",\"0x48C8039c32F4c6f5cb206A5911C8Ae814929C16B\":\"Node 0x48C8039c32F4c6f5cb206A5911C8Ae814929C16B did not respond before timeout (30s).\"}",
+        "[taco-signing] Threshold of signatures not met; TACo signing failed with errors: {\"0xb15d5A4e2be34f4bE154A1b08a94Ab920FfD8A41\":\"(<class 'nucypher.network.concurrency.SigningRequestClient.SigningRequestFailed'>, SigningRequestFailed(\\\"Node 0xb15d5A4e2be34f4bE154A1b08a94Ab920FfD8A41 raised HTTPSConnectionPool(host='167.71.226.39', port=9151): Read timed out. (read timeout=3.05)\\\"), <traceback object at 0x7d619acfbd00>)\",\"0x210eeAC07542F815ebB6FD6689637D8cA2689392\":\"Node 0x210eeAC07542F815ebB6FD6689637D8cA2689392 did not respond before timeout (30s).\",\"0x48C8039c32F4c6f5cb206A5911C8Ae814929C16B\":\"Node 0x48C8039c32F4c6f5cb206A5911C8Ae814929C16B did not respond before timeout (30s).\"}",
+        "[taco-signing] Threshold of signatures not met; TACo signing failed with errors: {\"0xb15d5A4e2be34f4bE154A1b08a94Ab920FfD8A41\":\"(<class 'nucypher.network.concurrency.SigningRequestClient.SigningRequestFailed'>, SigningRequestFailed(\\\"Node 0xb15d5A4e2be34f4bE154A1b08a94Ab920FfD8A41 raised HTTPSConnectionPool(host='167.71.226.39', port=9151): Read timed out. (read timeout=3.05)\\\"), <traceback object at 0x7d619b841880>)\",\"0x210eeAC07542F815ebB6FD6689637D8cA2689392\":\"Node 0x210eeAC07542F815ebB6FD6689637D8cA2689392 did not respond before timeout (30s).\",\"0x48C8039c32F4c6f5cb206A5911C8Ae814929C16B\":\"Node 0x48C8039c32F4c6f5cb206A5911C8Ae814929C16B did not respond before timeout (30s).\"}",
+        "[taco-signing] Threshold of signatures not met; TACo signing failed with errors: {\"0xb15d5A4e2be34f4bE154A1b08a94Ab920FfD8A41\":\"(<class 'nucypher.network.concurrency.SigningRequestClient.SigningRequestFailed'>, SigningRequestFailed(\\\"Node 0xb15d5A4e2be34f4bE154A1b08a94Ab920FfD8A41 raised HTTPSConnectionPool(host='167.71.226.39', port=9151): Read timed out. (read timeout=3.05)\\\"), <traceback object at 0x7d61a75ceb40>)\",\"0x210eeAC07542F815ebB6FD6689637D8cA2689392\":\"Node 0x210eeAC07542F815ebB6FD6689637D8cA2689392 did not respond before timeout (30s).\",\"0x48C8039c32F4c6f5cb206A5911C8Ae814929C16B\":\"Node 0x48C8039c32F4c6f5cb206A5911C8Ae814929C16B did not respond before timeout (30s).\"}",
+        "[taco-signing] Threshold of signatures not met; TACo signing failed with errors: {\"0x210eeAC07542F815ebB6FD6689637D8cA2689392\":\"Node 0x210eeAC07542F815ebB6FD6689637D8cA2689392 did not respond before timeout (30s).\",\"0x48C8039c32F4c6f5cb206A5911C8Ae814929C16B\":\"Node 0x48C8039c32F4c6f5cb206A5911C8Ae814929C16B did not respond before timeout (30s).\",\"0xb15d5A4e2be34f4bE154A1b08a94Ab920FfD8A41\":\"Node 0xb15d5A4e2be34f4bE154A1b08a94Ab920FfD8A41 did not respond before timeout (30s).\"}",
+        "[taco-signing] Threshold of signatures not met; TACo signing failed with errors: {\"0xb15d5A4e2be34f4bE154A1b08a94Ab920FfD8A41\":\"(<class 'nucypher.network.concurrency.SigningRequestClient.SigningRequestFailed'>, SigningRequestFailed(\\\"Node 0xb15d5A4e2be34f4bE154A1b08a94Ab920FfD8A41 raised HTTPSConnectionPool(host='167.71.226.39', port=9151): Read timed out. (read timeout=3.05)\\\"), <traceback object at 0x7d619ad79f80>)\",\"0x210eeAC07542F815ebB6FD6689637D8cA2689392\":\"Node 0x210eeAC07542F815ebB6FD6689637D8cA2689392 did not respond before timeout (30s).\",\"0x48C8039c32F4c6f5cb206A5911C8Ae814929C16B\":\"Node 0x48C8039c32F4c6f5cb206A5911C8Ae814929C16B did not respond before timeout (30s).\"}"
+      ],
+      "errorAnalysis": {
+        "totalFailures": 60,
+        "thresholdNotMet": 60,
+        "timeoutFailures": 180,
+        "otherFailures": 0,
+        "nodeErrors": [
+          {
+            "nodeAddress": "0x48C8039c32F4c6f5cb206A5911C8Ae814929C16B",
+            "timeouts": 60,
+            "otherErrors": 0,
+            "errorMessages": [
+              "Node 0x48C8039c32F4c6f5cb206A5911C8Ae814929C16B did not respond before timeout (30s)."
+            ]
+          },
+          {
+            "nodeAddress": "0x210eeAC07542F815ebB6FD6689637D8cA2689392",
+            "timeouts": 60,
+            "otherErrors": 0,
+            "errorMessages": [
+              "Node 0x210eeAC07542F815ebB6FD6689637D8cA2689392 did not respond before timeout (30s)."
+            ]
+          },
+          {
+            "nodeAddress": "0xb15d5A4e2be34f4bE154A1b08a94Ab920FfD8A41",
+            "timeouts": 60,
+            "otherErrors": 0,
+            "errorMessages": [
+              "Node 0xb15d5A4e2be34f4bE154A1b08a94Ab920FfD8A41 did not respond before timeout (30s).",
+              "(<class 'nucypher.network.concurrency.SigningRequestClient.SigningRequestFailed'>, SigningRequestFailed(\"Node 0xb15d5A4e2be34f4bE154A1b08a94Ab920FfD8A41 raised HTTPSConnectionPool(host='167.71.226.39', port=9151): Read timed out. (read timeout=3.05)\"), <traceback object at 0x792d73fbe340>)",
+              "(<class 'nucypher.network.concurrency.SigningRequestClient.SigningRequestFailed'>, SigningRequestFailed(\"Node 0xb15d5A4e2be34f4bE154A1b08a94Ab920FfD8A41 raised HTTPSConnectionPool(host='167.71.226.39', port=9151): Read timed out. (read timeout=3.05)\"), <traceback object at 0x792d72ca1900>)",
+              "(<class 'nucypher.network.concurrency.SigningRequestClient.SigningRequestFailed'>, SigningRequestFailed(\"Node 0xb15d5A4e2be34f4bE154A1b08a94Ab920FfD8A41 raised HTTPSConnectionPool(host='167.71.226.39', port=9151): Read timed out. (read timeout=3.05)\"), <traceback object at 0x7d61a75ccb00>)",
+              "(<class 'nucypher.network.concurrency.SigningRequestClient.SigningRequestFailed'>, SigningRequestFailed(\"Node 0xb15d5A4e2be34f4bE154A1b08a94Ab920FfD8A41 raised HTTPSConnectionPool(host='167.71.226.39', port=9151): Read timed out. (read timeout=3.05)\"), <traceback object at 0x7d61a75cfec0>)",
+              "(<class 'nucypher.network.concurrency.SigningRequestClient.SigningRequestFailed'>, SigningRequestFailed(\"Node 0xb15d5A4e2be34f4bE154A1b08a94Ab920FfD8A41 raised HTTPSConnectionPool(host='167.71.226.39', port=9151): Read timed out. (read timeout=3.05)\"), <traceback object at 0x7d619acfbd00>)",
+              "(<class 'nucypher.network.concurrency.SigningRequestClient.SigningRequestFailed'>, SigningRequestFailed(\"Node 0xb15d5A4e2be34f4bE154A1b08a94Ab920FfD8A41 raised HTTPSConnectionPool(host='167.71.226.39', port=9151): Read timed out. (read timeout=3.05)\"), <traceback object at 0x7d619b841880>)",
+              "(<class 'nucypher.network.concurrency.SigningRequestClient.SigningRequestFailed'>, SigningRequestFailed(\"Node 0xb15d5A4e2be34f4bE154A1b08a94Ab920FfD8A41 raised HTTPSConnectionPool(host='167.71.226.39', port=9151): Read timed out. (read timeout=3.05)\"), <traceback object at 0x7d61a75ceb40>)",
+              "(<class 'nucypher.network.concurrency.SigningRequestClient.SigningRequestFailed'>, SigningRequestFailed(\"Node 0xb15d5A4e2be34f4bE154A1b08a94Ab920FfD8A41 raised HTTPSConnectionPool(host='167.71.226.39', port=9151): Read timed out. (read timeout=3.05)\"), <traceback object at 0x7d619ad79f80>)"
+            ]
+          }
+        ],
+        "rawErrors": [
+          "[taco-signing] Threshold of signatures not met; TACo signing failed with errors: {\"0x48C8039c32F4c6f5cb206A5911C8Ae814929C16B\":\"Node 0x48C8039c32F4c6f5cb206A5911C8Ae814929C16B did not respond before timeout (30s).\",\"0x210eeAC07542F815ebB6FD6689637D8cA2689392\":\"Node 0x210eeAC07542F815ebB6FD6689637D8cA2689392 did not respond before timeout (30s).\",\"0xb15d5A4e2be34f4bE154A1b08a94Ab920FfD8A41\":\"Node 0xb15d5A4e2be34f4bE154A1b08a94Ab920FfD8A41 did not respond before timeout (30s).\"}",
+          "[taco-signing] Threshold of signatures not met; TACo signing failed with errors: {\"0x48C8039c32F4c6f5cb206A5911C8Ae814929C16B\":\"Node 0x48C8039c32F4c6f5cb206A5911C8Ae814929C16B did not respond before timeout (30s).\",\"0xb15d5A4e2be34f4bE154A1b08a94Ab920FfD8A41\":\"Node 0xb15d5A4e2be34f4bE154A1b08a94Ab920FfD8A41 did not respond before timeout (30s).\",\"0x210eeAC07542F815ebB6FD6689637D8cA2689392\":\"Node 0x210eeAC07542F815ebB6FD6689637D8cA2689392 did not respond before timeout (30s).\"}",
+          "[taco-signing] Threshold of signatures not met; TACo signing failed with errors: {\"0xb15d5A4e2be34f4bE154A1b08a94Ab920FfD8A41\":\"Node 0xb15d5A4e2be34f4bE154A1b08a94Ab920FfD8A41 did not respond before timeout (30s).\",\"0x210eeAC07542F815ebB6FD6689637D8cA2689392\":\"Node 0x210eeAC07542F815ebB6FD6689637D8cA2689392 did not respond before timeout (30s).\",\"0x48C8039c32F4c6f5cb206A5911C8Ae814929C16B\":\"Node 0x48C8039c32F4c6f5cb206A5911C8Ae814929C16B did not respond before timeout (30s).\"}",
+          "[taco-signing] Threshold of signatures not met; TACo signing failed with errors: {\"0xb15d5A4e2be34f4bE154A1b08a94Ab920FfD8A41\":\"(<class 'nucypher.network.concurrency.SigningRequestClient.SigningRequestFailed'>, SigningRequestFailed(\\\"Node 0xb15d5A4e2be34f4bE154A1b08a94Ab920FfD8A41 raised HTTPSConnectionPool(host='167.71.226.39', port=9151): Read timed out. (read timeout=3.05)\\\"), <traceback object at 0x792d73fbe340>)\",\"0x210eeAC07542F815ebB6FD6689637D8cA2689392\":\"Node 0x210eeAC07542F815ebB6FD6689637D8cA2689392 did not respond before timeout (30s).\",\"0x48C8039c32F4c6f5cb206A5911C8Ae814929C16B\":\"Node 0x48C8039c32F4c6f5cb206A5911C8Ae814929C16B did not respond before timeout (30s).\"}",
+          "[taco-signing] Threshold of signatures not met; TACo signing failed with errors: {\"0xb15d5A4e2be34f4bE154A1b08a94Ab920FfD8A41\":\"(<class 'nucypher.network.concurrency.SigningRequestClient.SigningRequestFailed'>, SigningRequestFailed(\\\"Node 0xb15d5A4e2be34f4bE154A1b08a94Ab920FfD8A41 raised HTTPSConnectionPool(host='167.71.226.39', port=9151): Read timed out. (read timeout=3.05)\\\"), <traceback object at 0x792d72ca1900>)\",\"0x210eeAC07542F815ebB6FD6689637D8cA2689392\":\"Node 0x210eeAC07542F815ebB6FD6689637D8cA2689392 did not respond before timeout (30s).\",\"0x48C8039c32F4c6f5cb206A5911C8Ae814929C16B\":\"Node 0x48C8039c32F4c6f5cb206A5911C8Ae814929C16B did not respond before timeout (30s).\"}",
+          "[taco-signing] Threshold of signatures not met; TACo signing failed with errors: {\"0xb15d5A4e2be34f4bE154A1b08a94Ab920FfD8A41\":\"(<class 'nucypher.network.concurrency.SigningRequestClient.SigningRequestFailed'>, SigningRequestFailed(\\\"Node 0xb15d5A4e2be34f4bE154A1b08a94Ab920FfD8A41 raised HTTPSConnectionPool(host='167.71.226.39', port=9151): Read timed out. (read timeout=3.05)\\\"), <traceback object at 0x7d61a75ccb00>)\",\"0x210eeAC07542F815ebB6FD6689637D8cA2689392\":\"Node 0x210eeAC07542F815ebB6FD6689637D8cA2689392 did not respond before timeout (30s).\",\"0x48C8039c32F4c6f5cb206A5911C8Ae814929C16B\":\"Node 0x48C8039c32F4c6f5cb206A5911C8Ae814929C16B did not respond before timeout (30s).\"}",
+          "[taco-signing] Threshold of signatures not met; TACo signing failed with errors: {\"0xb15d5A4e2be34f4bE154A1b08a94Ab920FfD8A41\":\"(<class 'nucypher.network.concurrency.SigningRequestClient.SigningRequestFailed'>, SigningRequestFailed(\\\"Node 0xb15d5A4e2be34f4bE154A1b08a94Ab920FfD8A41 raised HTTPSConnectionPool(host='167.71.226.39', port=9151): Read timed out. (read timeout=3.05)\\\"), <traceback object at 0x7d61a75cfec0>)\",\"0x210eeAC07542F815ebB6FD6689637D8cA2689392\":\"Node 0x210eeAC07542F815ebB6FD6689637D8cA2689392 did not respond before timeout (30s).\",\"0x48C8039c32F4c6f5cb206A5911C8Ae814929C16B\":\"Node 0x48C8039c32F4c6f5cb206A5911C8Ae814929C16B did not respond before timeout (30s).\"}",
+          "[taco-signing] Threshold of signatures not met; TACo signing failed with errors: {\"0xb15d5A4e2be34f4bE154A1b08a94Ab920FfD8A41\":\"(<class 'nucypher.network.concurrency.SigningRequestClient.SigningRequestFailed'>, SigningRequestFailed(\\\"Node 0xb15d5A4e2be34f4bE154A1b08a94Ab920FfD8A41 raised HTTPSConnectionPool(host='167.71.226.39', port=9151): Read timed out. (read timeout=3.05)\\\"), <traceback object at 0x7d619acfbd00>)\",\"0x210eeAC07542F815ebB6FD6689637D8cA2689392\":\"Node 0x210eeAC07542F815ebB6FD6689637D8cA2689392 did not respond before timeout (30s).\",\"0x48C8039c32F4c6f5cb206A5911C8Ae814929C16B\":\"Node 0x48C8039c32F4c6f5cb206A5911C8Ae814929C16B did not respond before timeout (30s).\"}",
+          "[taco-signing] Threshold of signatures not met; TACo signing failed with errors: {\"0xb15d5A4e2be34f4bE154A1b08a94Ab920FfD8A41\":\"(<class 'nucypher.network.concurrency.SigningRequestClient.SigningRequestFailed'>, SigningRequestFailed(\\\"Node 0xb15d5A4e2be34f4bE154A1b08a94Ab920FfD8A41 raised HTTPSConnectionPool(host='167.71.226.39', port=9151): Read timed out. (read timeout=3.05)\\\"), <traceback object at 0x7d619b841880>)\",\"0x210eeAC07542F815ebB6FD6689637D8cA2689392\":\"Node 0x210eeAC07542F815ebB6FD6689637D8cA2689392 did not respond before timeout (30s).\",\"0x48C8039c32F4c6f5cb206A5911C8Ae814929C16B\":\"Node 0x48C8039c32F4c6f5cb206A5911C8Ae814929C16B did not respond before timeout (30s).\"}",
+          "[taco-signing] Threshold of signatures not met; TACo signing failed with errors: {\"0xb15d5A4e2be34f4bE154A1b08a94Ab920FfD8A41\":\"(<class 'nucypher.network.concurrency.SigningRequestClient.SigningRequestFailed'>, SigningRequestFailed(\\\"Node 0xb15d5A4e2be34f4bE154A1b08a94Ab920FfD8A41 raised HTTPSConnectionPool(host='167.71.226.39', port=9151): Read timed out. (read timeout=3.05)\\\"), <traceback object at 0x7d61a75ceb40>)\",\"0x210eeAC07542F815ebB6FD6689637D8cA2689392\":\"Node 0x210eeAC07542F815ebB6FD6689637D8cA2689392 did not respond before timeout (30s).\",\"0x48C8039c32F4c6f5cb206A5911C8Ae814929C16B\":\"Node 0x48C8039c32F4c6f5cb206A5911C8Ae814929C16B did not respond before timeout (30s).\"}",
+          "[taco-signing] Threshold of signatures not met; TACo signing failed with errors: {\"0x210eeAC07542F815ebB6FD6689637D8cA2689392\":\"Node 0x210eeAC07542F815ebB6FD6689637D8cA2689392 did not respond before timeout (30s).\",\"0x48C8039c32F4c6f5cb206A5911C8Ae814929C16B\":\"Node 0x48C8039c32F4c6f5cb206A5911C8Ae814929C16B did not respond before timeout (30s).\",\"0xb15d5A4e2be34f4bE154A1b08a94Ab920FfD8A41\":\"Node 0xb15d5A4e2be34f4bE154A1b08a94Ab920FfD8A41 did not respond before timeout (30s).\"}",
+          "[taco-signing] Threshold of signatures not met; TACo signing failed with errors: {\"0xb15d5A4e2be34f4bE154A1b08a94Ab920FfD8A41\":\"(<class 'nucypher.network.concurrency.SigningRequestClient.SigningRequestFailed'>, SigningRequestFailed(\\\"Node 0xb15d5A4e2be34f4bE154A1b08a94Ab920FfD8A41 raised HTTPSConnectionPool(host='167.71.226.39', port=9151): Read timed out. (read timeout=3.05)\\\"), <traceback object at 0x7d619ad79f80>)\",\"0x210eeAC07542F815ebB6FD6689637D8cA2689392\":\"Node 0x210eeAC07542F815ebB6FD6689637D8cA2689392 did not respond before timeout (30s).\",\"0x48C8039c32F4c6f5cb206A5911C8Ae814929C16B\":\"Node 0x48C8039c32F4c6f5cb206A5911C8Ae814929C16B did not respond before timeout (30s).\"}"
+        ]
+      }
+    }
+  ],
+  "burstResults": [
+    {
+      "mode": "burst",
+      "targetRate": 3,
+      "duration": 35.6,
+      "requests": {
+        "total": 3,
+        "success": 0,
+        "failed": 3
+      },
+      "latency": {
+        "min": 35556,
+        "max": 36569,
+        "mean": 35910,
+        "p50": 35604,
+        "p95": 36569,
+        "p99": 36569,
+        "stdDev": 467
+      },
+      "successLatency": null,
+      "failureLatency": {
+        "min": 35556,
+        "max": 36569,
+        "mean": 35910,
+        "p50": 35604,
+        "p95": 36569,
+        "p99": 36569,
+        "stdDev": 467
+      },
+      "tacoSigningTime": null,
+      "successTacoSigningTime": null,
+      "failureTacoSigningTime": null,
+      "errors": [
+        "[taco-signing] Threshold of signatures not met; TACo signing failed with errors: {\"0x210eeAC07542F815ebB6FD6689637D8cA2689392\":\"Node 0x210eeAC07542F815ebB6FD6689637D8cA2689392 did not respond before timeout (30s).\",\"0x48C8039c32F4c6f5cb206A5911C8Ae814929C16B\":\"Node 0x48C8039c32F4c6f5cb206A5911C8Ae814929C16B did not respond before timeout (30s).\",\"0xb15d5A4e2be34f4bE154A1b08a94Ab920FfD8A41\":\"Node 0xb15d5A4e2be34f4bE154A1b08a94Ab920FfD8A41 did not respond before timeout (30s).\"}"
+      ],
+      "errorAnalysis": {
+        "totalFailures": 3,
+        "thresholdNotMet": 3,
+        "timeoutFailures": 9,
+        "otherFailures": 0,
+        "nodeErrors": [
+          {
+            "nodeAddress": "0x210eeAC07542F815ebB6FD6689637D8cA2689392",
+            "timeouts": 3,
+            "otherErrors": 0,
+            "errorMessages": [
+              "Node 0x210eeAC07542F815ebB6FD6689637D8cA2689392 did not respond before timeout (30s)."
+            ]
+          },
+          {
+            "nodeAddress": "0x48C8039c32F4c6f5cb206A5911C8Ae814929C16B",
+            "timeouts": 3,
+            "otherErrors": 0,
+            "errorMessages": [
+              "Node 0x48C8039c32F4c6f5cb206A5911C8Ae814929C16B did not respond before timeout (30s)."
+            ]
+          },
+          {
+            "nodeAddress": "0xb15d5A4e2be34f4bE154A1b08a94Ab920FfD8A41",
+            "timeouts": 3,
+            "otherErrors": 0,
+            "errorMessages": [
+              "Node 0xb15d5A4e2be34f4bE154A1b08a94Ab920FfD8A41 did not respond before timeout (30s)."
+            ]
+          }
+        ],
+        "rawErrors": [
+          "[taco-signing] Threshold of signatures not met; TACo signing failed with errors: {\"0x210eeAC07542F815ebB6FD6689637D8cA2689392\":\"Node 0x210eeAC07542F815ebB6FD6689637D8cA2689392 did not respond before timeout (30s).\",\"0x48C8039c32F4c6f5cb206A5911C8Ae814929C16B\":\"Node 0x48C8039c32F4c6f5cb206A5911C8Ae814929C16B did not respond before timeout (30s).\",\"0xb15d5A4e2be34f4bE154A1b08a94Ab920FfD8A41\":\"Node 0xb15d5A4e2be34f4bE154A1b08a94Ab920FfD8A41 did not respond before timeout (30s).\"}"
+        ]
+      }
+    },
+    {
+      "mode": "burst",
+      "targetRate": 5,
+      "duration": 4.4,
+      "requests": {
+        "total": 5,
+        "success": 0,
+        "failed": 5
+      },
+      "latency": {
+        "min": 3572,
+        "max": 4411,
+        "mean": 4229,
+        "p50": 4393,
+        "p95": 4411,
+        "p99": 4411,
+        "stdDev": 329
+      },
+      "successLatency": null,
+      "failureLatency": {
+        "min": 3572,
+        "max": 4411,
+        "mean": 4229,
+        "p50": 4393,
+        "p95": 4411,
+        "p99": 4411,
+        "stdDev": 329
+      },
+      "tacoSigningTime": null,
+      "successTacoSigningTime": null,
+      "failureTacoSigningTime": null,
+      "errors": [
+        "[taco-signing] Request failed with status code 503"
+      ],
+      "errorAnalysis": {
+        "totalFailures": 5,
+        "thresholdNotMet": 0,
+        "timeoutFailures": 0,
+        "otherFailures": 5,
+        "nodeErrors": [],
+        "rawErrors": [
+          "[taco-signing] Request failed with status code 503"
+        ]
+      }
+    },
+    {
+      "mode": "burst",
+      "targetRate": 10,
+      "duration": 28.1,
+      "requests": {
+        "total": 10,
+        "success": 6,
+        "failed": 4
+      },
+      "latency": {
+        "min": 5405,
+        "max": 28452,
+        "mean": 19037,
+        "p50": 27501,
+        "p95": 28452,
+        "p99": 28452,
+        "stdDev": 11120
+      },
+      "successLatency": {
+        "min": 27501,
+        "max": 28452,
+        "mean": 28113,
+        "p50": 28078,
+        "p95": 28452,
+        "p99": 28452,
+        "stdDev": 351
+      },
+      "failureLatency": {
+        "min": 5405,
+        "max": 5455,
+        "mean": 5422,
+        "p50": 5410,
+        "p95": 5455,
+        "p99": 5455,
+        "stdDev": 20
+      },
+      "tacoSigningTime": {
+        "min": 27501,
+        "max": 28452,
+        "mean": 28113,
+        "p50": 28078,
+        "p95": 28452,
+        "p99": 28452,
+        "stdDev": 351
+      },
+      "successTacoSigningTime": {
+        "min": 27501,
+        "max": 28452,
+        "mean": 28113,
+        "p50": 28078,
+        "p95": 28452,
+        "p99": 28452,
+        "stdDev": 351
+      },
+      "failureTacoSigningTime": null,
+      "errors": [
+        "[taco-signing] Request failed with status code 503"
+      ],
+      "errorAnalysis": {
+        "totalFailures": 4,
+        "thresholdNotMet": 0,
+        "timeoutFailures": 0,
+        "otherFailures": 4,
+        "nodeErrors": [],
+        "rawErrors": [
+          "[taco-signing] Request failed with status code 503"
+        ]
+      }
+    }
+  ]
+}
