@@ -161,7 +161,7 @@ async function signUserOpWithTaco(
     BASE_SEPOLIA_CHAIN_ID,
     userOp as UserOperationToSign,
     AA_VERSION,
-    signingContext,
+    { context: signingContext, timeout: 120 },
   );
   const signingTimeMs = Date.now() - startTime;
 
