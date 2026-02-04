@@ -190,6 +190,7 @@ interface PreparedPayload {
   smartAccount: any;
   recipientAA: Address;
   calls: Array<{ to: Address; value: bigint; data?: `0x${string}` }>;
+  userOp: Record<string, unknown>;
   discordContext: {
     timestamp: string;
     signature: string;
@@ -252,6 +253,11 @@ interface NodeFailure {
   otherErrors: number;
 }
 
+interface ErrorWithCount {
+  message: string;
+  count: number;
+}
+
 interface RunResult {
   mode: "steady" | "burst";
   // For steady mode: target requests per minute
@@ -270,7 +276,7 @@ interface RunResult {
   successTacoSigningTime: Stats | null;
   failureTacoSigningTime: Stats | null;
   nodeFailures: NodeFailure[];
-  errors: string[];
+  errors: ErrorWithCount[];
 }
 
 interface TestData {
@@ -690,11 +696,21 @@ async function preparePayload(payload: Payload): Promise<PreparedPayload> {
     payload: bodyString,
   };
 
+  // Prepare UserOp using bundler (expensive - calls RPC for nonce and gas estimates)
+  const userOp = await bundlerClient.prepareUserOperation({
+    account: smartAccount,
+    calls,
+    maxFeePerGas: 3_000_000_000n,
+    maxPriorityFeePerGas: 3_000_000_000n,
+    verificationGasLimit: BigInt(500_000),
+  });
+
   return {
     payload,
     smartAccount,
     recipientAA,
     calls,
+    userOp,
     discordContext,
   };
 }
@@ -775,24 +791,12 @@ async function executeSigningRequestInner(
   startTime: number,
 ): Promise<RequestResult> {
   let tacoSigningTimeMs: number | undefined;
-  let phase = "init";
 
   try {
-    // Prepare UserOp using bundler (uses pre-computed smart account and calls)
-    phase = "prepare-userop";
-    const userOp = await bundlerClient.prepareUserOperation({
-      account: prepared.smartAccount,
-      calls: prepared.calls,
-      maxFeePerGas: 3_000_000_000n,
-      maxPriorityFeePerGas: 3_000_000_000n,
-      verificationGasLimit: BigInt(500_000),
-    });
-
-    // Sign with TACo (uses pre-computed discord context)
-    phase = "taco-signing";
+    // Sign with TACo (uses pre-computed userOp and discord context)
     const tacoStartTime = Date.now();
     await signUserOpWithTaco(
-      userOp,
+      prepared.userOp,
       signingCoordinatorProvider,
       prepared.discordContext,
       REQUEST_TIMEOUT_SECONDS,
@@ -817,7 +821,7 @@ async function executeSigningRequestInner(
       endTime,
       duration: endTime - startTime,
       success: false,
-      error: `[${phase}] ${errorMessage}`,
+      error: `[taco-signing] ${errorMessage}`,
       tacoSigningTimeMs,
     };
   }
@@ -1088,9 +1092,17 @@ function printResults(
   const failureTacoSigningTimeStats =
     tacoFailureTimes.length > 0 ? calculateStats(tacoFailureTimes) : null;
 
-  const errors = failedResults.map((r) => r.error || "Unknown error");
-  const uniqueErrors = [...new Set(errors)];
-  const nodeFailures = parseNodeFailures(errors);
+  const allErrors = failedResults.map((r) => r.error || "Unknown error");
+  const nodeFailures = parseNodeFailures(allErrors);
+
+  // Count occurrences of each error
+  const errorCountMap = new Map<string, number>();
+  for (const err of allErrors) {
+    errorCountMap.set(err, (errorCountMap.get(err) || 0) + 1);
+  }
+  const errorsWithCounts: ErrorWithCount[] = Array.from(
+    errorCountMap.entries(),
+  ).map(([message, count]) => ({ message, count }));
 
   console.log("\n" + "=".repeat(60));
   console.log("                    STRESS TEST RESULTS");
@@ -1120,16 +1132,18 @@ function printResults(
     console.log(formatStats(tacoStats));
   }
 
-  if (uniqueErrors.length > 0) {
+  if (errorsWithCounts.length > 0) {
     console.log();
     console.log("ERRORS");
-    for (const err of uniqueErrors.slice(0, 5)) {
-      const count = errors.filter((e) => e === err).length;
-      const shortErr = err.length > 60 ? err.slice(0, 60) + "..." : err;
+    for (const { message, count } of errorsWithCounts.slice(0, 5)) {
+      const shortErr =
+        message.length > 60 ? message.slice(0, 60) + "..." : message;
       console.log(`    [${count}x] ${shortErr}`);
     }
-    if (uniqueErrors.length > 5) {
-      console.log(`    ... and ${uniqueErrors.length - 5} more unique errors`);
+    if (errorsWithCounts.length > 5) {
+      console.log(
+        `    ... and ${errorsWithCounts.length - 5} more unique errors`,
+      );
     }
   }
 
@@ -1152,7 +1166,7 @@ function printResults(
     successTacoSigningTime: successTacoSigningTimeStats,
     failureTacoSigningTime: failureTacoSigningTimeStats,
     nodeFailures,
-    errors: uniqueErrors,
+    errors: errorsWithCounts,
   };
 }
 
@@ -1179,7 +1193,7 @@ function generateHtmlReport(data: TestData): string {
   };
 
   // Collect all errors for the error section
-  const allErrors: Array<{ source: string; errors: string[] }> = [];
+  const allErrors: Array<{ source: string; errors: ErrorWithCount[] }> = [];
   for (const r of steadyResults) {
     if (r.errors.length > 0) {
       allErrors.push({
@@ -1199,10 +1213,10 @@ function generateHtmlReport(data: TestData): string {
 
   // Group and count errors
   const groupErrors = (
-    errors: string[],
+    errors: ErrorWithCount[],
   ): Map<string, { count: number; full: string }> => {
     const errorCounts = new Map<string, { count: number; full: string }>();
-    for (const err of errors) {
+    for (const { message: err, count: errCount } of errors) {
       let errorType: string;
       if (err.includes("Gateway Timeout") || err.includes("status code 504")) {
         errorType = "Porter 504 Gateway Timeout";
@@ -1226,9 +1240,9 @@ function generateHtmlReport(data: TestData): string {
 
       const existing = errorCounts.get(errorType);
       if (existing) {
-        existing.count++;
+        existing.count += errCount;
       } else {
-        errorCounts.set(errorType, { count: 1, full: err });
+        errorCounts.set(errorType, { count: errCount, full: err });
       }
     }
     return errorCounts;
@@ -1571,30 +1585,13 @@ function generateHtmlReport(data: TestData): string {
       // Generate per-test error sections
       const perTestSections = resultsWithErrors
         .map((r) => {
-          const errorAnalysis = (r as any).errorAnalysis;
-          const nodeErrors = errorAnalysis?.nodeErrors || r.nodeFailures || [];
+          const nodeErrors = r.nodeFailures || [];
           const source =
             r.mode === "steady"
               ? `Steady @ ${r.targetRate} requests/min`
               : `Burst size ${r.targetRate}`;
 
-          const totalFailures =
-            errorAnalysis?.totalFailures || r.requests.failed;
-          const thresholdNotMet =
-            errorAnalysis?.thresholdNotMet || r.requests.failed;
-          const timeoutFailures =
-            errorAnalysis?.timeoutFailures ||
-            nodeErrors.reduce(
-              (sum: number, n: any) => sum + (n.timeouts || 0),
-              0,
-            );
-          const otherFailures =
-            errorAnalysis?.otherFailures ||
-            nodeErrors.reduce(
-              (sum: number, n: any) => sum + (n.otherErrors || 0),
-              0,
-            );
-
+          const totalFailures = r.requests.failed;
           if (totalFailures === 0) return "";
 
           // Group and count error messages for this test
@@ -1602,6 +1599,26 @@ function generateHtmlReport(data: TestData): string {
           const sortedErrors = Array.from(errorCounts.entries()).sort(
             (a, b) => b[1].count - a[1].count,
           );
+
+          // Compute error breakdown from the grouped errors
+          let thresholdNotMet = 0;
+          let timeoutFailures = 0;
+          let otherFailures = 0;
+          for (const [errorType, { count }] of errorCounts.entries()) {
+            if (errorType === "Threshold of signatures not met") {
+              thresholdNotMet += count;
+            } else if (
+              errorType.includes("timeout") ||
+              errorType.includes("Timeout") ||
+              errorType === "Request timeout" ||
+              errorType === "Porter 504 Gateway Timeout" ||
+              errorType === "Porter stream timeout"
+            ) {
+              timeoutFailures += count;
+            } else {
+              otherFailures += count;
+            }
+          }
 
           return `
       <div class="error-section">
@@ -1734,6 +1751,10 @@ ${perTestSections}
         successPct: (r.requests.success / r.requests.total) * 100,
         tacoP50: r.tacoSigningTime?.p50 || 0,
         tacoP95: r.tacoSigningTime?.p95 || 0,
+        successP50: r.successTacoSigningTime?.p50 || null,
+        successP95: r.successTacoSigningTime?.p95 || null,
+        failureP50: r.failureLatency?.p50 || null,
+        failureP95: r.failureLatency?.p95 || null,
       })),
     )};
 
@@ -1746,6 +1767,10 @@ ${perTestSections}
         successPct: (r.requests.success / r.requests.total) * 100,
         tacoP50: r.tacoSigningTime?.p50 || 0,
         tacoP95: r.tacoSigningTime?.p95 || 0,
+        successP50: r.successTacoSigningTime?.p50 || null,
+        successP95: r.successTacoSigningTime?.p95 || null,
+        failureP50: r.failureLatency?.p50 || null,
+        failureP95: r.failureLatency?.p95 || null,
       })),
     )};
 
@@ -1812,7 +1837,7 @@ ${perTestSections}
       new Chart(document.getElementById('steadySuccessChart'), {
         type: 'line',
         data: {
-          labels: steadyData.map(d => d.rate + ' req/sec'),
+          labels: steadyData.map(d => d.rate + '/min'),
           datasets: [{
             label: 'Success Rate',
             data: steadyData.map(d => d.successPct),
@@ -1868,15 +1893,15 @@ ${perTestSections}
         },
       });
 
-      // TACo Signing Time Chart
+      // TACo Signing Time Chart (Success vs Failure)
       new Chart(document.getElementById('steadyLatencyChart'), {
         type: 'line',
         data: {
-          labels: steadyData.map(d => d.rate + ' req/sec'),
+          labels: steadyData.map(d => d.rate + '/min'),
           datasets: [
             {
-              label: 'p50 (median)',
-              data: steadyData.map(d => d.tacoP50 / 1000),
+              label: 'Success TACo p50',
+              data: steadyData.map(d => d.successP50 ? d.successP50 / 1000 : null),
               borderColor: '#96FF5E',
               backgroundColor: 'rgba(150, 255, 94, 0.1)',
               borderWidth: 3,
@@ -1887,20 +1912,54 @@ ${perTestSections}
               pointBackgroundColor: '#96FF5E',
               pointBorderColor: '#000000',
               pointBorderWidth: 2,
+              spanGaps: true,
             },
             {
-              label: 'p95',
-              data: steadyData.map(d => d.tacoP95 / 1000),
-              borderColor: '#ffffff',
-              backgroundColor: 'rgba(255, 255, 255, 0.1)',
+              label: 'Success TACo p95',
+              data: steadyData.map(d => d.successP95 ? d.successP95 / 1000 : null),
+              borderColor: '#96FF5E',
+              backgroundColor: 'rgba(150, 255, 94, 0.1)',
+              borderWidth: 2,
+              borderDash: [5, 5],
+              fill: false,
+              tension: 0.2,
+              pointRadius: 4,
+              pointHoverRadius: 6,
+              pointBackgroundColor: '#96FF5E',
+              pointBorderColor: '#000000',
+              pointBorderWidth: 1,
+              spanGaps: true,
+            },
+            {
+              label: 'Failure Latency p50',
+              data: steadyData.map(d => d.failureP50 ? d.failureP50 / 1000 : null),
+              borderColor: '#ef5350',
+              backgroundColor: 'rgba(239, 83, 80, 0.1)',
               borderWidth: 3,
               fill: false,
               tension: 0.2,
               pointRadius: 6,
               pointHoverRadius: 8,
-              pointBackgroundColor: '#ffffff',
+              pointBackgroundColor: '#ef5350',
               pointBorderColor: '#000000',
               pointBorderWidth: 2,
+              spanGaps: true,
+            },
+            {
+              label: 'Failure Latency p95',
+              data: steadyData.map(d => d.failureP95 ? d.failureP95 / 1000 : null),
+              borderColor: '#ef5350',
+              backgroundColor: 'rgba(239, 83, 80, 0.1)',
+              borderWidth: 2,
+              borderDash: [5, 5],
+              fill: false,
+              tension: 0.2,
+              pointRadius: 4,
+              pointHoverRadius: 6,
+              pointBackgroundColor: '#ef5350',
+              pointBorderColor: '#000000',
+              pointBorderWidth: 1,
+              spanGaps: true,
             },
           ],
         },
@@ -1908,12 +1967,12 @@ ${perTestSections}
           ...commonOptions,
           plugins: {
             ...commonOptions.plugins,
-            title: { ...commonOptions.plugins.title, text: 'TACo Signing Time vs Request Rate' },
+            title: { ...commonOptions.plugins.title, text: 'Response Time vs Request Rate' },
             tooltip: {
               ...commonOptions.plugins.tooltip,
               callbacks: {
                 title: (items) => 'Request Rate: ' + items[0].label,
-                label: (ctx) => ctx.dataset.label + ': ' + ctx.parsed.y.toFixed(2) + 's',
+                label: (ctx) => ctx.parsed.y !== null ? ctx.dataset.label + ': ' + ctx.parsed.y.toFixed(2) + 's' : ctx.dataset.label + ': N/A',
               },
             },
           },
@@ -1995,15 +2054,15 @@ ${perTestSections}
         },
       });
 
-      // TACo Signing Time Chart
+      // Response Time Chart (Success vs Failure)
       new Chart(document.getElementById('burstLatencyChart'), {
         type: 'line',
         data: {
           labels: burstData.map(d => d.size + ' concurrent'),
           datasets: [
             {
-              label: 'p50 (median)',
-              data: burstData.map(d => d.tacoP50 / 1000),
+              label: 'Success TACo p50',
+              data: burstData.map(d => d.successP50 ? d.successP50 / 1000 : null),
               borderColor: '#96FF5E',
               backgroundColor: 'rgba(150, 255, 94, 0.1)',
               borderWidth: 3,
@@ -2014,20 +2073,54 @@ ${perTestSections}
               pointBackgroundColor: '#96FF5E',
               pointBorderColor: '#000000',
               pointBorderWidth: 2,
+              spanGaps: true,
             },
             {
-              label: 'p95',
-              data: burstData.map(d => d.tacoP95 / 1000),
-              borderColor: '#ffffff',
-              backgroundColor: 'rgba(255, 255, 255, 0.1)',
+              label: 'Success TACo p95',
+              data: burstData.map(d => d.successP95 ? d.successP95 / 1000 : null),
+              borderColor: '#96FF5E',
+              backgroundColor: 'rgba(150, 255, 94, 0.1)',
+              borderWidth: 2,
+              borderDash: [5, 5],
+              fill: false,
+              tension: 0.2,
+              pointRadius: 4,
+              pointHoverRadius: 6,
+              pointBackgroundColor: '#96FF5E',
+              pointBorderColor: '#000000',
+              pointBorderWidth: 1,
+              spanGaps: true,
+            },
+            {
+              label: 'Failure Latency p50',
+              data: burstData.map(d => d.failureP50 ? d.failureP50 / 1000 : null),
+              borderColor: '#ef5350',
+              backgroundColor: 'rgba(239, 83, 80, 0.1)',
               borderWidth: 3,
               fill: false,
               tension: 0.2,
               pointRadius: 6,
               pointHoverRadius: 8,
-              pointBackgroundColor: '#ffffff',
+              pointBackgroundColor: '#ef5350',
               pointBorderColor: '#000000',
               pointBorderWidth: 2,
+              spanGaps: true,
+            },
+            {
+              label: 'Failure Latency p95',
+              data: burstData.map(d => d.failureP95 ? d.failureP95 / 1000 : null),
+              borderColor: '#ef5350',
+              backgroundColor: 'rgba(239, 83, 80, 0.1)',
+              borderWidth: 2,
+              borderDash: [5, 5],
+              fill: false,
+              tension: 0.2,
+              pointRadius: 4,
+              pointHoverRadius: 6,
+              pointBackgroundColor: '#ef5350',
+              pointBorderColor: '#000000',
+              pointBorderWidth: 1,
+              spanGaps: true,
             },
           ],
         },
@@ -2035,12 +2128,12 @@ ${perTestSections}
           ...commonOptions,
           plugins: {
             ...commonOptions.plugins,
-            title: { ...commonOptions.plugins.title, text: 'TACo Signing Time vs Burst Size' },
+            title: { ...commonOptions.plugins.title, text: 'Response Time vs Burst Size' },
             tooltip: {
               ...commonOptions.plugins.tooltip,
               callbacks: {
                 title: (items) => 'Burst Size: ' + items[0].label,
-                label: (ctx) => ctx.dataset.label + ': ' + ctx.parsed.y.toFixed(2) + 's',
+                label: (ctx) => ctx.parsed.y !== null ? ctx.dataset.label + ': ' + ctx.parsed.y.toFixed(2) + 's' : ctx.dataset.label + ': N/A',
               },
             },
           },
