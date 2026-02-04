@@ -228,6 +228,12 @@ interface Stats {
   stdDev: number;
 }
 
+interface NodeFailure {
+  address: string;
+  timeouts: number;
+  otherErrors: number;
+}
+
 interface RunResult {
   mode: "steady" | "burst";
   // For steady mode: target requests per minute
@@ -240,7 +246,12 @@ interface RunResult {
     failed: number;
   };
   latency: Stats;
+  successLatency: Stats | null;
+  failureLatency: Stats | null;
   tacoSigningTime: Stats | null;
+  successTacoSigningTime: Stats | null;
+  failureTacoSigningTime: Stats | null;
+  nodeFailures: NodeFailure[];
   errors: string[];
 }
 
@@ -932,6 +943,52 @@ function formatStats(stats: Stats, unit: string = "ms"): string {
   );
 }
 
+function parseNodeFailures(errors: string[]): NodeFailure[] {
+  const nodeMap = new Map<string, { timeouts: number; otherErrors: number }>();
+
+  for (const error of errors) {
+    // Match patterns like: "Node 0x48C8039c32F4c6f5cb206A5911C8Ae814929C16B did not respond before timeout"
+    const timeoutMatches = error.matchAll(
+      /Node\s+(0x[a-fA-F0-9]+)\s+did not respond before timeout/g,
+    );
+    for (const match of timeoutMatches) {
+      const addr = match[1];
+      const existing = nodeMap.get(addr) || { timeouts: 0, otherErrors: 0 };
+      existing.timeouts++;
+      nodeMap.set(addr, existing);
+    }
+
+    // Also try to parse from JSON-like error format
+    const jsonMatch = error.match(
+      /TACo signing failed with errors:\s*(\{[^}]+\})/,
+    );
+    if (jsonMatch) {
+      try {
+        const errObj = JSON.parse(jsonMatch[1]);
+        for (const [addr, msg] of Object.entries(errObj)) {
+          const existing = nodeMap.get(addr) || { timeouts: 0, otherErrors: 0 };
+          if (String(msg).includes("timeout")) {
+            existing.timeouts++;
+          } else {
+            existing.otherErrors++;
+          }
+          nodeMap.set(addr, existing);
+        }
+      } catch {
+        // ignore parse errors
+      }
+    }
+  }
+
+  return Array.from(nodeMap.entries())
+    .map(([address, counts]) => ({
+      address,
+      timeouts: counts.timeouts,
+      otherErrors: counts.otherErrors,
+    }))
+    .sort((a, b) => b.timeouts + b.otherErrors - (a.timeouts + a.otherErrors));
+}
+
 function printResults(
   results: RequestResult[],
   mode: string,
@@ -945,13 +1002,35 @@ function printResults(
   const latencies = results.map((r) => r.duration);
   const latencyStats = calculateStats(latencies);
 
+  // Separate success/failure latencies
+  const successLatencies = successResults.map((r) => r.duration);
+  const failureLatencies = failedResults.map((r) => r.duration);
+  const successLatencyStats =
+    successLatencies.length > 0 ? calculateStats(successLatencies) : null;
+  const failureLatencyStats =
+    failureLatencies.length > 0 ? calculateStats(failureLatencies) : null;
+
+  // All TACo times
   const tacoTimes = results
     .filter((r) => r.tacoSigningTimeMs !== undefined)
     .map((r) => r.tacoSigningTimeMs!);
   const tacoStats = tacoTimes.length > 0 ? calculateStats(tacoTimes) : null;
 
+  // Separate success/failure TACo times
+  const tacoSuccessTimes = successResults
+    .filter((r) => r.tacoSigningTimeMs !== undefined)
+    .map((r) => r.tacoSigningTimeMs!);
+  const tacoFailureTimes = failedResults
+    .filter((r) => r.tacoSigningTimeMs !== undefined)
+    .map((r) => r.tacoSigningTimeMs!);
+  const successTacoSigningTimeStats =
+    tacoSuccessTimes.length > 0 ? calculateStats(tacoSuccessTimes) : null;
+  const failureTacoSigningTimeStats =
+    tacoFailureTimes.length > 0 ? calculateStats(tacoFailureTimes) : null;
+
   const errors = failedResults.map((r) => r.error || "Unknown error");
   const uniqueErrors = [...new Set(errors)];
+  const nodeFailures = parseNodeFailures(errors);
 
   console.log("\n" + "=".repeat(60));
   console.log("                    STRESS TEST RESULTS");
@@ -1007,7 +1086,12 @@ function printResults(
       failed: failedResults.length,
     },
     latency: latencyStats,
+    successLatency: successLatencyStats,
+    failureLatency: failureLatencyStats,
     tacoSigningTime: tacoStats,
+    successTacoSigningTime: successTacoSigningTimeStats,
+    failureTacoSigningTime: failureTacoSigningTimeStats,
+    nodeFailures,
     errors: uniqueErrors,
   };
 }
@@ -1295,11 +1379,13 @@ function generateHtmlReport(data: TestData): string {
     <table>
       <thead>
         <tr>
-          <th>Request Rate</th>
-          <th>Total Requests</th>
+          <th>Rate</th>
+          <th>Total</th>
           <th>Success %</th>
-          <th>TACo Signing p50</th>
-          <th>TACo Signing p95</th>
+          <th>Success Latency p50</th>
+          <th>Failure Latency p50</th>
+          <th>TACo Success p50</th>
+          <th>TACo Failure p50</th>
         </tr>
       </thead>
       <tbody>
@@ -1310,11 +1396,13 @@ function generateHtmlReport(data: TestData): string {
               100
             ).toFixed(1);
             return `<tr>
-            <td>${r.targetRate}/sec</td>
+            <td>${r.targetRate}/min</td>
             <td>${r.requests.total}</td>
             <td>${successPct}%</td>
-            <td>${r.tacoSigningTime ? formatDuration(r.tacoSigningTime.p50) : "N/A"}</td>
-            <td>${r.tacoSigningTime ? formatDuration(r.tacoSigningTime.p95) : "N/A"}</td>
+            <td>${r.successLatency ? formatDuration(r.successLatency.p50) : "N/A"}</td>
+            <td>${r.failureLatency ? formatDuration(r.failureLatency.p50) : "N/A"}</td>
+            <td>${r.successTacoSigningTime ? formatDuration(r.successTacoSigningTime.p50) : "N/A"}</td>
+            <td>${r.failureTacoSigningTime ? formatDuration(r.failureTacoSigningTime.p50) : "N/A"}</td>
           </tr>`;
           })
           .join("")}
@@ -1347,11 +1435,13 @@ function generateHtmlReport(data: TestData): string {
       <thead>
         <tr>
           <th>Burst Size</th>
-          <th>Total Requests</th>
+          <th>Total</th>
           <th>Batches</th>
           <th>Success %</th>
-          <th>TACo Signing p50</th>
-          <th>TACo Signing p95</th>
+          <th>Success Latency p50</th>
+          <th>Failure Latency p50</th>
+          <th>TACo Success p50</th>
+          <th>TACo Failure p50</th>
         </tr>
       </thead>
       <tbody>
@@ -1367,8 +1457,10 @@ function generateHtmlReport(data: TestData): string {
             <td>${r.requests.total}</td>
             <td>${batches}</td>
             <td>${successPct}%</td>
-            <td>${r.tacoSigningTime ? formatDuration(r.tacoSigningTime.p50) : "N/A"}</td>
-            <td>${r.tacoSigningTime ? formatDuration(r.tacoSigningTime.p95) : "N/A"}</td>
+            <td>${r.successLatency ? formatDuration(r.successLatency.p50) : "N/A"}</td>
+            <td>${r.failureLatency ? formatDuration(r.failureLatency.p50) : "N/A"}</td>
+            <td>${r.successTacoSigningTime ? formatDuration(r.successTacoSigningTime.p50) : "N/A"}</td>
+            <td>${r.failureTacoSigningTime ? formatDuration(r.failureTacoSigningTime.p50) : "N/A"}</td>
           </tr>`;
           })
           .join("")}
@@ -1378,36 +1470,145 @@ function generateHtmlReport(data: TestData): string {
         : ""
     }
 
-    ${
-      allErrors.length > 0
-        ? `
-    <h2>Error Analysis</h2>
-    ${allErrors
-      .map(({ source, errors }) => {
-        const grouped = groupErrors(errors);
-        return `
+    ${(() => {
+      // Collect results with error analysis
+      const resultsWithErrors = [...steadyResults, ...burstResults].filter(
+        (r) =>
+          (r as any).errorAnalysis ||
+          (r.nodeFailures && r.nodeFailures.length > 0) ||
+          r.errors.length > 0,
+      );
+      if (resultsWithErrors.length === 0) return "";
+
+      // Aggregate node failures only from tests that have errorAnalysis
+      const allNodeFailures = new Map<
+        string,
+        { timeouts: number; otherErrors: number }
+      >();
+      for (const r of resultsWithErrors) {
+        const nodeErrors =
+          (r as any).errorAnalysis?.nodeErrors || r.nodeFailures || [];
+        for (const nf of nodeErrors) {
+          const addr = nf.nodeAddress || nf.address;
+          const existing = allNodeFailures.get(addr) || {
+            timeouts: 0,
+            otherErrors: 0,
+          };
+          existing.timeouts += nf.timeouts || 0;
+          existing.otherErrors += nf.otherErrors || 0;
+          allNodeFailures.set(addr, existing);
+        }
+      }
+      const sortedNodes = Array.from(allNodeFailures.entries()).sort(
+        (a, b) =>
+          b[1].timeouts + b[1].otherErrors - (a[1].timeouts + a[1].otherErrors),
+      );
+
+      // Generate per-test error sections
+      const perTestSections = resultsWithErrors
+        .map((r) => {
+          const errorAnalysis = (r as any).errorAnalysis;
+          const nodeErrors = errorAnalysis?.nodeErrors || r.nodeFailures || [];
+          const source =
+            r.mode === "steady"
+              ? `Steady @ ${r.targetRate} requests/min`
+              : `Burst size ${r.targetRate}`;
+
+          const totalFailures =
+            errorAnalysis?.totalFailures || r.requests.failed;
+          const thresholdNotMet =
+            errorAnalysis?.thresholdNotMet || r.requests.failed;
+          const timeoutFailures =
+            errorAnalysis?.timeoutFailures ||
+            nodeErrors.reduce(
+              (sum: number, n: any) => sum + (n.timeouts || 0),
+              0,
+            );
+          const otherFailures =
+            errorAnalysis?.otherFailures ||
+            nodeErrors.reduce(
+              (sum: number, n: any) => sum + (n.otherErrors || 0),
+              0,
+            );
+
+          if (totalFailures === 0) return "";
+
+          return `
       <div class="error-section">
         <h3>${source}</h3>
-        ${Array.from(grouped.entries())
-          .map(
-            ([errorType, { count, full }]) => `
-          <details>
-            <summary class="error-type">
-              <span>${errorType}</span>
-              <span class="error-count">${count}</span>
-            </summary>
-            <div class="error-example">${full.replace(/</g, "&lt;").replace(/>/g, "&gt;")}</div>
-          </details>
-        `,
-          )
-          .join("")}
+        <div style="display: grid; grid-template-columns: repeat(4, 1fr); gap: 1rem; margin-bottom: 1rem;">
+          <div><strong>Total:</strong> ${totalFailures}</div>
+          <div><strong>Threshold not met:</strong> ${thresholdNotMet}</div>
+          <div><strong>Node timeouts:</strong> ${timeoutFailures}</div>
+          <div><strong>Other:</strong> ${otherFailures}</div>
+        </div>
+
+        <details>
+          <summary>Node breakdown</summary>
+          <table style="margin-top: 0.5rem;">
+            <thead>
+              <tr><th>Node</th><th>Timeouts</th><th>Other</th></tr>
+            </thead>
+            <tbody>
+${nodeErrors
+  .map(
+    (nf: any) => `
+                <tr>
+                  <td><code>${nf.nodeAddress || nf.address}</code></td>
+                  <td>${nf.timeouts || 0}</td>
+                  <td>${nf.otherErrors || 0}</td>
+                </tr>
+`,
+  )
+  .join("")}
+            </tbody>
+          </table>
+        </details>
       </div>
     `;
-      })
-      .join("")}
-    `
-        : ""
-    }
+        })
+        .join("");
+
+      return `
+    <h2>Error Analysis</h2>
+
+${
+  sortedNodes.length > 0
+    ? `
+    <div class="error-section">
+      <h3>Node-Level Failures (Aggregated)</h3>
+      <table>
+        <thead>
+          <tr>
+            <th>Node Address</th>
+            <th>Timeouts</th>
+            <th>Other Errors</th>
+            <th>Total</th>
+          </tr>
+        </thead>
+        <tbody>
+${sortedNodes
+  .map(
+    ([addr, counts]) => `
+            <tr>
+              <td><code>${addr}</code></td>
+              <td>${counts.timeouts}</td>
+              <td>${counts.otherErrors}</td>
+              <td>${counts.timeouts + counts.otherErrors}</td>
+            </tr>
+`,
+  )
+  .join("")}
+        </tbody>
+      </table>
+    </div>
+`
+    : ""
+}
+
+${perTestSections}
+`;
+    })()}
 
     <details class="glossary">
       <summary><h2 style="display: inline;">Glossary</h2></summary>
