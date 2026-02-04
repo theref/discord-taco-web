@@ -1591,6 +1591,12 @@ function generateHtmlReport(data: TestData): string {
 
           if (totalFailures === 0) return "";
 
+          // Group and count error messages for this test
+          const errorCounts = groupErrors(r.errors);
+          const sortedErrors = Array.from(errorCounts.entries()).sort(
+            (a, b) => b[1].count - a[1].count,
+          );
+
           return `
       <div class="error-section">
         <h3>${source}</h3>
@@ -1601,6 +1607,32 @@ function generateHtmlReport(data: TestData): string {
           <div><strong>Other:</strong> ${otherFailures}</div>
         </div>
 
+        ${
+          sortedErrors.length > 0
+            ? `
+        <details open>
+          <summary>Error messages (${sortedErrors.length} unique)</summary>
+          <div style="margin-top: 0.5rem;">
+${sortedErrors
+  .map(
+    ([errorType, { count, full }]) => `
+            <div class="error-type">
+              <span>${errorType}</span>
+              <span class="error-count">${count}x</span>
+            </div>
+            <div class="error-example">${full.replace(/</g, "&lt;").replace(/>/g, "&gt;")}</div>
+`,
+  )
+  .join("")}
+          </div>
+        </details>
+        `
+            : ""
+        }
+
+        ${
+          nodeErrors.length > 0
+            ? `
         <details>
           <summary>Node breakdown</summary>
           <table style="margin-top: 0.5rem;">
@@ -1622,6 +1654,9 @@ ${nodeErrors
             </tbody>
           </table>
         </details>
+        `
+            : ""
+        }
       </div>
     `;
         })
