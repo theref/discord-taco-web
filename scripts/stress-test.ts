@@ -181,6 +181,19 @@ interface Payload {
   bodyJson?: string;
 }
 
+// Pre-computed data for a payload (expensive setup done once)
+interface PreparedPayload {
+  payload: Payload;
+  smartAccount: any;
+  recipientAA: Address;
+  calls: Array<{ to: Address; value: bigint; data?: `0x${string}` }>;
+  discordContext: {
+    timestamp: string;
+    signature: string;
+    payload: string;
+  };
+}
+
 interface ConfigDefaults {
   mode?: "steady" | "burst" | "sweep";
   duration?: number;
@@ -592,6 +605,112 @@ async function initializeClients(): Promise<void> {
 }
 
 // =============================================================================
+// Payload Preparation (expensive setup done once per payload)
+// =============================================================================
+
+async function preparePayload(payload: Payload): Promise<PreparedPayload> {
+  // Parse body
+  const body = payload.bodyJson ? JSON.parse(payload.bodyJson) : payload.body;
+  if (!body) {
+    throw new Error("Payload must have either 'body' or 'bodyJson'");
+  }
+
+  const senderDiscordId = String(body?.member?.user?.id || "");
+  if (!senderDiscordId) {
+    throw new Error("Missing member.user.id in payload body");
+  }
+
+  // Extract transfer parameters
+  const executeCmd = body?.data?.options?.find(
+    (o: any) => o?.name === "execute",
+  );
+  const opts = executeCmd?.options || [];
+  const amountOpt = opts.find((o: any) => o?.name === "amount")?.value;
+  const tokenOpt = opts.find((o: any) => o?.name === "token")?.value;
+  const tokenType = String(tokenOpt ?? "ETH").toUpperCase();
+
+  // Create smart account for sender (expensive - calls RPC)
+  const senderSalt = ethers.utils.keccak256(
+    ethers.utils.toUtf8Bytes(`${senderDiscordId}|Discord|Collab.Land`),
+  ) as `0x${string}`;
+
+  const { smartAccount } = await createTacoSmartAccount(
+    publicClient,
+    signingCoordinatorProvider,
+    signingChainProvider,
+    senderSalt,
+  );
+
+  // Derive recipient address (expensive - calls RPC)
+  const recipientAA = await deriveDiscordUserAA(
+    publicClient,
+    signingCoordinatorProvider,
+    signingChainProvider,
+    payload.recipientUserId,
+  );
+
+  // Parse amount and build calls array
+  const amountStr = String(amountOpt ?? "0.0001");
+  const tokenDecimals = tokenType === "USDC" ? 6 : 18;
+  const transferAmount = ethers.utils.parseUnits(amountStr, tokenDecimals);
+
+  const tokenAddress = TOKEN_ADDRESSES[tokenType];
+  const calls: Array<{ to: Address; value: bigint; data?: `0x${string}` }> =
+    tokenAddress
+      ? [
+          {
+            to: tokenAddress,
+            value: 0n,
+            data: encodeFunctionData({
+              abi: ERC20_TRANSFER_ABI,
+              functionName: "transfer",
+              args: [recipientAA, BigInt(transferAmount.toString())],
+            }),
+          },
+        ]
+      : [
+          {
+            to: recipientAA,
+            value: BigInt(transferAmount.toString()),
+          },
+        ];
+
+  // Build Discord context
+  const bodyString = payload.bodyJson || JSON.stringify(payload.body);
+  const discordContext = {
+    timestamp: payload.timestamp,
+    signature: payload.signature.replace(/^0x/, ""),
+    payload: bodyString,
+  };
+
+  return {
+    payload,
+    smartAccount,
+    recipientAA,
+    calls,
+    discordContext,
+  };
+}
+
+async function prepareAllPayloads(
+  payloads: Payload[],
+): Promise<PreparedPayload[]> {
+  console.log(`[stress-test] Preparing ${payloads.length} payload(s)...`);
+  const prepared: PreparedPayload[] = [];
+
+  for (let i = 0; i < payloads.length; i++) {
+    const payload = payloads[i];
+    console.log(
+      `[stress-test]   Preparing payload ${i + 1}/${payloads.length}...`,
+    );
+    prepared.push(await preparePayload(payload));
+  }
+
+  console.log(`[stress-test] All payloads prepared`);
+  return prepared;
+}
+
+// =============================================================================
 // Request Executor
 // =============================================================================
 
@@ -611,12 +730,14 @@ async function withTimeout<T>(
   );
 }
 
-async function executeSigningRequest(payload: Payload): Promise<RequestResult> {
+async function executeSigningRequest(
+  prepared: PreparedPayload,
+): Promise<RequestResult> {
   const startTime = Date.now();
 
   // Wrap the entire execution in a timeout
   return withTimeout(
-    executeSigningRequestInner(payload, startTime),
+    executeSigningRequestInner(prepared, startTime),
     REQUEST_TIMEOUT_MS,
     `Request timed out after ${REQUEST_TIMEOUT_MS / 1000}s`,
   ).catch((error) => {
@@ -633,109 +754,30 @@ async function executeSigningRequest(payload: Payload): Promise<RequestResult> {
 }
 
 async function executeSigningRequestInner(
-  payload: Payload,
+  prepared: PreparedPayload,
   startTime: number,
 ): Promise<RequestResult> {
   let tacoSigningTimeMs: number | undefined;
   let phase = "init";
 
   try {
-    // Parse body
-    phase = "parse-payload";
-    const body = payload.bodyJson ? JSON.parse(payload.bodyJson) : payload.body;
-    if (!body) {
-      throw new Error("Payload must have either 'body' or 'bodyJson'");
-    }
-
-    const senderDiscordId = String(body?.member?.user?.id || "");
-    if (!senderDiscordId) {
-      throw new Error("Missing member.user.id in payload body");
-    }
-
-    // Extract transfer parameters
-    const executeCmd = body?.data?.options?.find(
-      (o: any) => o?.name === "execute",
-    );
-    const opts = executeCmd?.options || [];
-    const amountOpt = opts.find((o: any) => o?.name === "amount")?.value;
-    const tokenOpt = opts.find((o: any) => o?.name === "token")?.value;
-    const tokenType = String(tokenOpt ?? "ETH").toUpperCase();
-
-    // Create smart account for sender
-    phase = "create-smart-account";
-    const senderSalt = ethers.utils.keccak256(
-      ethers.utils.toUtf8Bytes(`${senderDiscordId}|Discord|Collab.Land`),
-    ) as `0x${string}`;
-
-    const { smartAccount } = await createTacoSmartAccount(
-      publicClient,
-      signingCoordinatorProvider,
-      signingChainProvider,
-      senderSalt,
-    );
-
-    // Derive recipient address
-    phase = "derive-recipient";
-    const recipientAA = await deriveDiscordUserAA(
-      publicClient,
-      signingCoordinatorProvider,
-      signingChainProvider,
-      payload.recipientUserId,
-    );
-
-    // Parse amount
-    phase = "build-userop";
-    const amountStr = String(amountOpt ?? "0.0001");
-    const tokenDecimals = tokenType === "USDC" ? 6 : 18;
-    const transferAmount = ethers.utils.parseUnits(amountStr, tokenDecimals);
-
-    // Build calls array
-    const tokenAddress = TOKEN_ADDRESSES[tokenType];
-    const calls: Array<{ to: Address; value: bigint; data?: `0x${string}` }> =
-      tokenAddress
-        ? [
-            {
-              to: tokenAddress,
-              value: 0n,
-              data: encodeFunctionData({
-                abi: ERC20_TRANSFER_ABI,
-                functionName: "transfer",
-                args: [recipientAA, BigInt(transferAmount.toString())],
-              }),
-            },
-          ]
-        : [
-            {
-              to: recipientAA,
-              value: BigInt(transferAmount.toString()),
-            },
-          ];
-
-    // Prepare UserOp using bundler
+    // Prepare UserOp using bundler (uses pre-computed smart account and calls)
     phase = "prepare-userop";
     const userOp = await bundlerClient.prepareUserOperation({
-      account: smartAccount,
-      calls,
+      account: prepared.smartAccount,
+      calls: prepared.calls,
       maxFeePerGas: 3_000_000_000n,
       maxPriorityFeePerGas: 3_000_000_000n,
       verificationGasLimit: BigInt(500_000),
     });
 
-    // Build Discord context
-    const bodyString = payload.bodyJson || JSON.stringify(payload.body);
-    const discordContext = {
-      timestamp: payload.timestamp,
-      signature: payload.signature.replace(/^0x/, ""),
-      payload: bodyString,
-    };
-
-    // Sign with TACo
+    // Sign with TACo (uses pre-computed discord context)
     phase = "taco-signing";
     const tacoStartTime = Date.now();
     await signUserOpWithTaco(
       userOp,
       signingCoordinatorProvider,
-      discordContext,
+      prepared.discordContext,
     );
     tacoSigningTimeMs = Date.now() - tacoStartTime;
 
@@ -806,7 +848,7 @@ function sleep(ms: number): Promise<void> {
 }
 
 async function runSteadyMode(
-  payloads: Payload[],
+  preparedPayloads: PreparedPayload[],
   rate: number,
   duration: number,
   requestCount?: number,
@@ -825,12 +867,12 @@ async function runSteadyMode(
 
   // Fire requests at the target rate (don't wait for completion)
   for (let i = 0; i < totalRequests; i++) {
-    const payload = payloads[payloadIndex % payloads.length];
+    const prepared = preparedPayloads[payloadIndex % preparedPayloads.length];
     payloadIndex++;
     const requestIndex = i;
 
     // Fire the request (don't await)
-    const requestPromise = executeSigningRequest(payload).then((result) => {
+    const requestPromise = executeSigningRequest(prepared).then((result) => {
       result.index = requestIndex;
       completedCount++;
 
@@ -872,7 +914,7 @@ async function runSteadyMode(
 }
 
 async function runBurstMode(
-  payloads: Payload[],
+  preparedPayloads: PreparedPayload[],
   burstSize: number,
   totalBatches: number,
 ): Promise<RequestResult[]> {
@@ -892,11 +934,11 @@ async function runBurstMode(
     const currentBatchSize = Math.min(burstSize, totalRequests - requestIndex);
 
     for (let i = 0; i < currentBatchSize; i++) {
-      const payload = payloads[payloadIndex % payloads.length];
+      const prepared = preparedPayloads[payloadIndex % preparedPayloads.length];
       payloadIndex++;
       const idx = requestIndex++;
       batchPromises.push(
-        executeSigningRequest(payload).then((r) => ({ ...r, index: idx })),
+        executeSigningRequest(prepared).then((r) => ({ ...r, index: idx })),
       );
     }
 
@@ -2076,6 +2118,9 @@ Examples:
 
   await initializeClients();
 
+  // Pre-compute all expensive setup once (smart accounts, recipient addresses, etc.)
+  const preparedPayloads = await prepareAllPayloads(config.payloads);
+
   const steadyResults: RunResult[] = [];
   const burstResults: RunResult[] = [];
 
@@ -2096,7 +2141,7 @@ Examples:
       console.log(`Steady @ ${testRate} requests/min`);
       console.log("─".repeat(60));
       const results = await runSteadyMode(
-        config.payloads,
+        preparedPayloads,
         testRate,
         duration,
         requests,
@@ -2127,7 +2172,7 @@ Examples:
       console.log(`Burst size ${burstSize} (${batchesPerBurst} batches)`);
       console.log("─".repeat(60));
       const results = await runBurstMode(
-        config.payloads,
+        preparedPayloads,
         burstSize,
         batchesPerBurst,
       );
@@ -2181,14 +2226,14 @@ Examples:
   } else if (mode === "burst") {
     const burstSize = rate; // Use rate as burst size for single burst mode
     const results = await runBurstMode(
-      config.payloads,
+      preparedPayloads,
       burstSize,
       batchesPerBurst,
     );
     burstResults.push(printResults(results, "burst", burstSize));
   } else {
     const results = await runSteadyMode(
-      config.payloads,
+      preparedPayloads,
       rate,
       duration,
       requests,
