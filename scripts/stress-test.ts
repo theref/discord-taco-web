@@ -716,6 +716,16 @@ async function prepareAllPayloads(
 
 const REQUEST_TIMEOUT_MS = 60_000; // 60 second timeout per request
 
+// Suppress console.error during request execution to avoid noisy Porter error logs
+// The errors are still captured and reported in the test results
+function withSuppressedConsoleError<T>(fn: () => Promise<T>): Promise<T> {
+  const originalConsoleError = console.error;
+  console.error = () => {}; // Suppress
+  return fn().finally(() => {
+    console.error = originalConsoleError; // Restore
+  });
+}
+
 async function withTimeout<T>(
   promise: Promise<T>,
   timeoutMs: number,
@@ -735,11 +745,13 @@ async function executeSigningRequest(
 ): Promise<RequestResult> {
   const startTime = Date.now();
 
-  // Wrap the entire execution in a timeout
-  return withTimeout(
-    executeSigningRequestInner(prepared, startTime),
-    REQUEST_TIMEOUT_MS,
-    `Request timed out after ${REQUEST_TIMEOUT_MS / 1000}s`,
+  // Wrap the entire execution in a timeout, suppressing console.error from Porter
+  return withSuppressedConsoleError(() =>
+    withTimeout(
+      executeSigningRequestInner(prepared, startTime),
+      REQUEST_TIMEOUT_MS,
+      `Request timed out after ${REQUEST_TIMEOUT_MS / 1000}s`,
+    ),
   ).catch((error) => {
     const errorMessage = error instanceof Error ? error.message : String(error);
     return {
@@ -1186,7 +1198,11 @@ function generateHtmlReport(data: TestData): string {
     const errorCounts = new Map<string, { count: number; full: string }>();
     for (const err of errors) {
       let errorType: string;
-      if (err.includes("Threshold of signatures not met")) {
+      if (err.includes("Gateway Timeout") || err.includes("status code 504")) {
+        errorType = "Porter 504 Gateway Timeout";
+      } else if (err.includes("stream timeout")) {
+        errorType = "Porter stream timeout";
+      } else if (err.includes("Threshold of signatures not met")) {
         errorType = "Threshold of signatures not met";
       } else if (
         err.includes("NETWORK_ERROR") ||
@@ -1195,7 +1211,7 @@ function generateHtmlReport(data: TestData): string {
         errorType = "Network error (RPC overload)";
       } else if (err.includes("missing revert data")) {
         errorType = "Contract revert (missing revert data)";
-      } else if (err.includes("timeout")) {
+      } else if (err.includes("timeout") || err.includes("timed out")) {
         errorType = "Request timeout";
       } else {
         const phaseMatch = err.match(/^\[([^\]]+)\]/);
