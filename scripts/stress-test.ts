@@ -270,6 +270,7 @@ interface TimelineRequest {
   tacoSigningTimeMs: number | null;
   success: boolean;
   error?: string;
+  inFlight: number; // requests still waiting when this one completed
 }
 
 type StopReason = "duration" | "consecutive-failures" | "completed";
@@ -966,6 +967,7 @@ async function runSteadyMode(
 
     // Add to timeline
     const elapsed = (result.endTime - testStartTime) / 1000;
+    const inFlight = pendingRequests.size;
     timeline.push({
       index: result.index,
       timestamp: result.endTime,
@@ -974,10 +976,10 @@ async function runSteadyMode(
       tacoSigningTimeMs: result.tacoSigningTimeMs ?? null,
       success: result.success,
       error: result.error,
+      inFlight,
     });
 
     // Progress update
-    const inFlight = pendingRequests.size;
     const totalDesc = totalRequests ? `/${totalRequests}` : "";
     console.log(
       `[${elapsed.toFixed(0).padStart(3, "0")}s] Completed ${completedCount}${totalDesc} | ` +
@@ -1558,6 +1560,41 @@ function generateHtmlReport(data: TestData): string {
     .config-list { list-style: none; }
     .config-list li { padding: 0.25rem 0; }
     .config-list strong { color: var(--accent); }
+    .notes-section {
+      background: var(--card-bg);
+      border-radius: 8px;
+      padding: 1rem;
+      margin-bottom: 2rem;
+      border: 1px solid var(--border);
+    }
+    .notes-section h2 {
+      margin-bottom: 0.5rem;
+      font-size: 1rem;
+    }
+    .notes-textarea {
+      width: 100%;
+      min-height: 80px;
+      background: rgba(0,0,0,0.3);
+      border: 1px solid var(--border);
+      border-radius: 4px;
+      color: var(--text);
+      font-family: inherit;
+      font-size: 0.9rem;
+      padding: 0.75rem;
+      resize: vertical;
+    }
+    .notes-textarea:focus {
+      outline: none;
+      border-color: var(--accent);
+    }
+    .notes-textarea::placeholder {
+      color: var(--text-muted);
+    }
+    .notes-saved {
+      font-size: 0.75rem;
+      color: var(--text-muted);
+      margin-top: 0.25rem;
+    }
   </style>
 </head>
 <body>
@@ -1586,6 +1623,12 @@ function generateHtmlReport(data: TestData): string {
         <div class="value">${totalRequests - totalSuccess}</div>
         <div class="label">Failed</div>
       </div>
+    </div>
+
+    <div class="notes-section">
+      <h2>Notes</h2>
+      <textarea class="notes-textarea" id="reportNotes" placeholder="Add notes about this test run..."></textarea>
+      <div class="notes-saved" id="notesSaved"></div>
     </div>
 
     <h2>Configuration</h2>
@@ -1827,19 +1870,16 @@ function generateHtmlReport(data: TestData): string {
 
           // Compute error breakdown from the grouped errors
           let thresholdNotMet = 0;
-          let timeoutFailures = 0;
+          let porterTimeouts = 0;
           let otherFailures = 0;
           for (const [errorType, { count }] of errorCounts.entries()) {
             if (errorType === "Threshold of signatures not met") {
               thresholdNotMet += count;
             } else if (
-              errorType.includes("timeout") ||
-              errorType.includes("Timeout") ||
-              errorType === "Request timeout" ||
               errorType === "Porter 504 Gateway Timeout" ||
               errorType === "Porter stream timeout"
             ) {
-              timeoutFailures += count;
+              porterTimeouts += count;
             } else {
               otherFailures += count;
             }
@@ -1851,24 +1891,23 @@ function generateHtmlReport(data: TestData): string {
         <div style="display: grid; grid-template-columns: repeat(4, 1fr); gap: 1rem; margin-bottom: 1rem;">
           <div><strong>Total:</strong> ${totalFailures}</div>
           <div><strong>Threshold not met:</strong> ${thresholdNotMet}</div>
-          <div><strong>Node timeouts:</strong> ${timeoutFailures}</div>
+          <div><strong>Porter timeouts:</strong> ${porterTimeouts}</div>
           <div><strong>Other:</strong> ${otherFailures}</div>
         </div>
 
         ${
-          sortedErrors.length > 0
+          r.errors.length > 0
             ? `
         <details open>
-          <summary>Error messages (${sortedErrors.length} unique)</summary>
+          <summary>Error messages (${r.errors.length} unique)</summary>
           <div style="margin-top: 0.5rem;">
-${sortedErrors
+${r.errors
   .map(
-    ([errorType, { count, full }]) => `
+    ({ message, count }) => `
             <div class="error-type">
-              <span>${errorType}</span>
               <span class="error-count">${count}x</span>
             </div>
-            <div class="error-example">${full.replace(/</g, "&lt;").replace(/>/g, "&gt;")}</div>
+            <div class="error-example">${message.replace(/</g, "&lt;").replace(/>/g, "&gt;")}</div>
 `,
   )
   .join("")}
@@ -1970,12 +2009,13 @@ ${perTestSections}
     const isTimelineMode = ${isTimelineMode};
     const timelineData = ${JSON.stringify(
       isTimelineMode && steadyResults[0].timeline
-        ? steadyResults[0].timeline.map((t) => ({
-            x: t.elapsedSec,
+        ? steadyResults[0].timeline.map((t, i) => ({
+            x: i + 1,
             y: t.duration / 1000,
             success: t.success,
             error: t.error,
             tacoTime: t.tacoSigningTimeMs ? t.tacoSigningTimeMs / 1000 : null,
+            inFlight: t.inFlight ?? 0,
           }))
         : [],
     )};
@@ -2075,11 +2115,25 @@ ${perTestSections}
     if (isTimelineMode && timelineData.length > 0) {
       const successData = timelineData.filter(d => d.success);
       const failureData = timelineData.filter(d => !d.success);
+      const inFlightData = timelineData.map(d => ({ x: d.x, y: d.inFlight }));
 
       new Chart(document.getElementById('timelineChart'), {
         type: 'scatter',
         data: {
           datasets: [
+            {
+              label: 'Still waiting',
+              data: inFlightData,
+              type: 'line',
+              backgroundColor: 'rgba(80, 80, 80, 0.15)',
+              borderColor: 'rgba(100, 100, 100, 0.4)',
+              borderWidth: 1,
+              fill: true,
+              tension: 0.3,
+              pointRadius: 0,
+              yAxisID: 'y2',
+              order: 2,
+            },
             {
               label: 'Success',
               data: successData,
@@ -2087,6 +2141,7 @@ ${perTestSections}
               borderColor: '#96FF5E',
               pointRadius: 6,
               pointHoverRadius: 8,
+              order: 1,
             },
             {
               label: 'Failure',
@@ -2095,6 +2150,7 @@ ${perTestSections}
               borderColor: '#ef5350',
               pointRadius: 6,
               pointHoverRadius: 8,
+              order: 1,
             },
           ],
         },
@@ -2102,13 +2158,16 @@ ${perTestSections}
           ...commonOptions,
           plugins: {
             ...commonOptions.plugins,
-            title: { ...commonOptions.plugins.title, text: 'Response Time Over Time' },
+            title: { ...commonOptions.plugins.title, text: 'Response Time by Request' },
             tooltip: {
               ...commonOptions.plugins.tooltip,
               callbacks: {
-                title: (items) => 'Time: ' + items[0].parsed.x.toFixed(1) + 's',
+                title: (items) => 'Request #' + items[0].parsed.x,
                 label: (ctx) => {
                   const d = ctx.raw;
+                  if (ctx.dataset.label === 'Still waiting') {
+                    return 'Still waiting: ' + d.y;
+                  }
                   const lines = [
                     ctx.dataset.label + ': ' + d.y.toFixed(2) + 's',
                   ];
@@ -2161,14 +2220,22 @@ ${perTestSections}
             x: {
               ...commonOptions.scales.x,
               type: 'linear',
-              title: { ...commonOptions.scales.x.title, text: 'Elapsed Time (seconds)' },
-              ticks: { ...commonOptions.scales.x.ticks, callback: (v) => v + 's' },
+              title: { ...commonOptions.scales.x.title, text: 'Request Number' },
+              ticks: { ...commonOptions.scales.x.ticks, callback: (v) => '#' + v },
             },
             y: {
               ...commonOptions.scales.y,
+              position: 'left',
               beginAtZero: true,
               title: { ...commonOptions.scales.y.title, text: 'Response Time (seconds)' },
               ticks: { ...commonOptions.scales.y.ticks, callback: (v) => v + 's' },
+            },
+            y2: {
+              position: 'right',
+              beginAtZero: true,
+              grid: { display: false },
+              title: { display: true, text: 'Still Waiting', color: '#909090', font: { size: 12 } },
+              ticks: { color: '#606060', font: { size: 11 } },
             },
           },
         },
@@ -2496,6 +2563,30 @@ ${perTestSections}
         },
       });
     }
+
+    // Notes persistence using localStorage
+    const reportId = '${data.timestamp}';
+    const notesKey = 'stress-test-notes-' + reportId;
+    const notesTextarea = document.getElementById('reportNotes');
+    const notesSaved = document.getElementById('notesSaved');
+
+    // Load saved notes
+    const savedNotes = localStorage.getItem(notesKey);
+    if (savedNotes) {
+      notesTextarea.value = savedNotes;
+    }
+
+    // Save notes on change (debounced)
+    let saveTimeout;
+    notesTextarea.addEventListener('input', () => {
+      clearTimeout(saveTimeout);
+      notesSaved.textContent = 'Saving...';
+      saveTimeout = setTimeout(() => {
+        localStorage.setItem(notesKey, notesTextarea.value);
+        notesSaved.textContent = 'Saved';
+        setTimeout(() => { notesSaved.textContent = ''; }, 2000);
+      }, 500);
+    });
   </script>
 </body>
 </html>`;
