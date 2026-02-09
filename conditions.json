@@ -354,8 +354,8 @@
                   "data": ":discordPayload",
                   "query": "$.data.options[0].options[?(@.name == \"receiver\")].value",
                   "returnValueTest": {
-                    "comparator": "!=",
-                    "value": ""
+                    "comparator": ">",
+                    "value": 0
                   }
                 }
               },
