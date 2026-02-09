@@ -536,15 +536,16 @@ async function main() {
     const discordSignature = process.env.CONTEXT_SIGNATURE_HEX;
     const discordPayload = process.env.CONTEXT_DISCORD_PAYLOAD;
     const recipientUserId = process.env.TIP_RECIPIENT_USER_ID;
+    const recipientAddress = process.env.TIP_RECIPIENT_ADDRESS;
 
     if (
       !discordTimestamp ||
       !discordSignature ||
       !discordPayload ||
-      !recipientUserId
+      (!recipientUserId && !recipientAddress)
     ) {
       throw new Error(
-        "Missing Discord context. Required: CONTEXT_TIMESTAMP, CONTEXT_SIGNATURE_HEX, CONTEXT_DISCORD_PAYLOAD, TIP_RECIPIENT_USER_ID",
+        "Missing Discord context. Required: CONTEXT_TIMESTAMP, CONTEXT_SIGNATURE_HEX, CONTEXT_DISCORD_PAYLOAD, and TIP_RECIPIENT_USER_ID or TIP_RECIPIENT_ADDRESS",
       );
     }
 
@@ -653,7 +654,11 @@ async function main() {
     const executeCmd = parsed?.data?.options?.find(
       (o: { name: string }) => o?.name === "execute",
     );
-    const opts = executeCmd?.options || [];
+    const sendCmd = parsed?.data?.options?.find(
+      (o: { name: string }) => o?.name === "send",
+    );
+    const activeCmd = executeCmd || sendCmd;
+    const opts = activeCmd?.options || [];
     const amountOpt = opts.find(
       (o: { name: string }) => o?.name === "amount",
     )?.value;
@@ -684,16 +689,25 @@ async function main() {
     );
     const transferAmount = ethers.utils.parseUnits(amountStr, tokenDecimals);
 
-    // Derive recipient AA address (sender AA is already smartAccount.address)
-    console.log(`Deriving recipient AA for Discord user ${recipientUserId}...`);
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    const recipientAA = await deriveDiscordUserAA(
-      publicClient as any,
-      signingCoordinatorProvider,
-      signingChainProvider,
-      recipientUserId,
-    );
-    console.log(`Recipient AA: ${recipientAA}\n`);
+    let recipientAA: Address;
+    if (recipientAddress) {
+      // Direct ETH address (from /taco send)
+      console.log(`Using direct recipient address: ${recipientAddress}`);
+      recipientAA = recipientAddress as Address;
+    } else {
+      // Discord user ID (from /taco execute) — derive AA address
+      console.log(
+        `Deriving recipient AA for Discord user ${recipientUserId}...`,
+      );
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      recipientAA = await deriveDiscordUserAA(
+        publicClient as any,
+        signingCoordinatorProvider,
+        signingChainProvider,
+        recipientUserId!,
+      );
+    }
+    console.log(`Recipient: ${recipientAA}\n`);
 
     // Prepare user operation calls based on token type
     console.log("Preparing user operation...");
@@ -820,7 +834,7 @@ async function main() {
       from: smartAccount.address,
       fromDiscord: senderDiscordId,
       to: recipientAA,
-      toDiscord: recipientUserId,
+      toDiscord: recipientUserId || "",
       amount: formattedAmount,
       token: tokenType,
       chainId: BASE_SEPOLIA_CHAIN_ID,
