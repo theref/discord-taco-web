@@ -62,6 +62,42 @@ const commands = [
           },
         ],
       },
+      {
+        name: "send",
+        description: "Send tokens to an Ethereum address",
+        type: ApplicationCommandOptionType.Subcommand,
+        options: [
+          {
+            name: "receiver",
+            description: "Ethereum address to receive the transfer (0x...)",
+            type: ApplicationCommandOptionType.String,
+            required: true,
+          },
+          {
+            name: "chain",
+            description: "Chain to execute on",
+            type: ApplicationCommandOptionType.String,
+            required: true,
+            choices: [{ name: "Base Sepolia", value: "base-sepolia" }],
+          },
+          {
+            name: "token",
+            description: "Token to send",
+            type: ApplicationCommandOptionType.String,
+            required: true,
+            choices: [
+              { name: "ETH", value: "ETH" },
+              { name: "USDC", value: "USDC" },
+            ],
+          },
+          {
+            name: "amount",
+            description: "Amount to send (e.g. 0.001)",
+            type: ApplicationCommandOptionType.String,
+            required: true,
+          },
+        ],
+      },
     ],
   },
 ];
