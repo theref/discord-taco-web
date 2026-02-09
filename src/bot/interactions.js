@@ -273,20 +273,30 @@ function createServer() {
         return;
       }
 
-      // Extract tip parameters from Discord payload (nested execute subcommand)
+      // Extract tip parameters from Discord payload (execute or send subcommand)
       let amount = process.env.TIP_AMOUNT_ETH || "0.0001";
       let recipientUserId = "";
+      let recipientAddress = "";
       let tokenType = "ETH";
       const executeCmd = parsed?.data?.options?.find(
         (o) => o?.name === "execute",
       );
-      const options = executeCmd?.options || [];
+      const sendCmd = parsed?.data?.options?.find((o) => o?.name === "send");
+      const activeCmd = executeCmd || sendCmd;
+      const options = activeCmd?.options || [];
       const amountOpt = options.find((o) => o?.name === "amount")?.value;
       const recipientOpt = options.find((o) => o?.name === "receiver")?.value;
       const tokenOpt = options.find((o) => o?.name === "token")?.value;
       if (amountOpt != null) amount = String(amountOpt);
-      if (recipientOpt) recipientUserId = String(recipientOpt);
       if (tokenOpt) tokenType = String(tokenOpt);
+
+      if (sendCmd && recipientOpt) {
+        // send command: receiver is a raw ETH address
+        recipientAddress = String(recipientOpt);
+      } else if (recipientOpt) {
+        // execute command: receiver is a Discord user ID
+        recipientUserId = String(recipientOpt);
+      }
 
       // Validate minimum tip amount for ETH
       if (tokenType === "ETH") {
@@ -316,6 +326,7 @@ function createServer() {
         CONTEXT_DISCORD_PAYLOAD: rawBody.toString("utf8"),
         TIP_AMOUNT_ETH: amount,
         TIP_RECIPIENT_USER_ID: recipientUserId,
+        TIP_RECIPIENT_ADDRESS: recipientAddress,
         TIP_TOKEN_TYPE: tokenType,
       };
       console.log("   ✓ Overrides:", {
@@ -323,6 +334,7 @@ function createServer() {
         CONTEXT_SIGNATURE_HEX: `${String(sig).slice(0, 18)}...`,
         TIP_AMOUNT_ETH: amount,
         TIP_RECIPIENT_USER_ID: recipientUserId,
+        TIP_RECIPIENT_ADDRESS: recipientAddress,
         TIP_TOKEN_TYPE: tokenType,
       });
 
@@ -364,7 +376,7 @@ function createServer() {
               message =
                 `**Tip Sent!**\n` +
                 `> **From:** \`${shortenAddr(data.from)}\` (<@${data.fromDiscord}>)\n` +
-                `> **To:** \`${shortenAddr(data.to)}\` (<@${data.toDiscord}>)\n` +
+                `> **To:** ${data.toDiscord ? `\`${shortenAddr(data.to)}\` (<@${data.toDiscord}>)` : `\`${data.to}\``}\n` +
                 `> **Amount:** ${data.amount} ${data.token}\n` +
                 `> **Chain:** ${data.chainName}\n` +
                 `> **TACo:** ${tacoTime}\n` +
