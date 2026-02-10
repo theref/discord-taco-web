@@ -285,17 +285,18 @@ function createServer() {
       const activeCmd = executeCmd || sendCmd;
       const options = activeCmd?.options || [];
       const amountOpt = options.find((o) => o?.name === "amount")?.value;
-      const recipientOpt = options.find((o) => o?.name === "receiver")?.value;
       const tokenOpt = options.find((o) => o?.name === "token")?.value;
       if (amountOpt != null) amount = String(amountOpt);
       if (tokenOpt) tokenType = String(tokenOpt);
 
-      if (sendCmd && recipientOpt) {
-        // send command: receiver is a raw ETH address
-        recipientAddress = String(recipientOpt);
-      } else if (recipientOpt) {
-        // execute command: receiver is a Discord user ID
-        recipientUserId = String(recipientOpt);
+      if (sendCmd) {
+        // send command: address option is a raw ETH address
+        const addressOpt = options.find((o) => o?.name === "address")?.value;
+        if (addressOpt) recipientAddress = String(addressOpt);
+      } else {
+        // execute command: receiver option is a Discord user ID
+        const recipientOpt = options.find((o) => o?.name === "receiver")?.value;
+        if (recipientOpt) recipientUserId = String(recipientOpt);
       }
 
       // Validate minimum tip amount for ETH
