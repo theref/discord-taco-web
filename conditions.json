@@ -185,7 +185,7 @@
                   "query": "$.data.options[0].options[?(@.name == \"amount\")].value",
                   "returnValueTest": {
                     "comparator": ">=",
-                    "value": 0.5,
+                    "value": 0.25,
                     "operations": [
                       {
                         "operation": "float"
@@ -332,7 +332,7 @@
                   "query": "$.data.options[0].options[?(@.name == \"amount\")].value",
                   "returnValueTest": {
                     "comparator": ">=",
-                    "value": 0.5,
+                    "value": 0.25,
                     "operations": [
                       {
                         "operation": "float"
