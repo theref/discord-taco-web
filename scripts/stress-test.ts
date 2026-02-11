@@ -30,6 +30,7 @@ import {
   domains,
   Domain,
   signUserOp,
+  SigningTiming,
   UserOperationToSign,
 } from "@nucypher/taco";
 import {
@@ -133,27 +134,9 @@ async function deriveDiscordUserAA(
 async function signUserOpWithTaco(
   userOp: Record<string, unknown>,
   provider: ethers.providers.JsonRpcProvider,
-  discordContext: {
-    timestamp: string;
-    signature: string;
-    payload: string;
-  },
+  signingContext: InstanceType<typeof conditions.context.ConditionContext>,
   timeout: number,
 ) {
-  const signingContext =
-    await conditions.context.ConditionContext.forSigningCohort(
-      provider,
-      TACO_DOMAIN,
-      COHORT_ID,
-      BASE_SEPOLIA_CHAIN_ID,
-    );
-
-  (signingContext as any).customContextParameters = {
-    ":timestamp": discordContext.timestamp,
-    ":signature": discordContext.signature,
-    ":discordPayload": discordContext.payload,
-  };
-
   const startTime = Date.now();
   const result = await signUserOp(
     provider,
@@ -169,6 +152,48 @@ async function signUserOpWithTaco(
   const signingTimeMs = Date.now() - startTime;
 
   return { ...result, signingTimeMs };
+}
+
+// Pre-fetched condition for building contexts without RPC calls
+let cachedCondition: InstanceType<
+  typeof conditions.condition.Condition
+> | null = null;
+
+async function prefetchSigningCondition(): Promise<void> {
+  console.log("[stress-test] Pre-fetching signing condition from contract...");
+  const cohortConditionHex =
+    await SigningCoordinatorAgent.getSigningCohortConditions(
+      signingCoordinatorProvider,
+      TACO_DOMAIN,
+      COHORT_ID,
+      BASE_SEPOLIA_CHAIN_ID,
+    );
+  const cohortConditionJson = ethers.utils.toUtf8String(cohortConditionHex);
+  const conditionExpr =
+    conditions.conditionExpr.ConditionExpression.fromJSON(cohortConditionJson);
+  cachedCondition = conditionExpr.condition;
+  console.log("[stress-test] Signing condition pre-fetched");
+}
+
+function buildSigningContext(discordContext: {
+  timestamp: string;
+  signature: string;
+  payload: string;
+}): InstanceType<typeof conditions.context.ConditionContext> {
+  if (!cachedCondition) {
+    throw new Error(
+      "Signing condition not pre-fetched. Call prefetchSigningCondition() first.",
+    );
+  }
+
+  // Create a fresh ConditionContext from the cached condition (no RPC call)
+  const ctx = new conditions.context.ConditionContext(cachedCondition);
+  ctx.addCustomContextParameterValues({
+    ":timestamp": discordContext.timestamp,
+    ":signature": discordContext.signature,
+    ":discordPayload": discordContext.payload,
+  });
+  return ctx;
 }
 
 // =============================================================================
@@ -196,6 +221,7 @@ interface PreparedPayload {
     signature: string;
     payload: string;
   };
+  signingContext: InstanceType<typeof conditions.context.ConditionContext>;
 }
 
 interface ConfigDefaults {
@@ -239,6 +265,7 @@ interface RequestResult {
   success: boolean;
   error?: string;
   tacoSigningTimeMs?: number;
+  timing?: SigningTiming;
 }
 
 interface Stats {
@@ -647,6 +674,9 @@ async function initializeClients(): Promise<void> {
     chain: baseSepolia,
   });
 
+  // Pre-fetch signing condition from contract (avoids RPC call per request)
+  await prefetchSigningCondition();
+
   console.log("[stress-test] Initialized");
   initialized = true;
 }
@@ -739,6 +769,9 @@ async function preparePayload(payload: Payload): Promise<PreparedPayload> {
     verificationGasLimit: BigInt(500_000),
   });
 
+  // Build signing context from pre-fetched condition (no RPC call)
+  const signingContext = buildSigningContext(discordContext);
+
   return {
     payload,
     smartAccount,
@@ -746,6 +779,7 @@ async function preparePayload(payload: Payload): Promise<PreparedPayload> {
     calls,
     userOp,
     discordContext,
+    signingContext,
   };
 }
 
@@ -825,17 +859,20 @@ async function executeSigningRequestInner(
   startTime: number,
 ): Promise<RequestResult> {
   let tacoSigningTimeMs: number | undefined;
+  let timing: SigningTiming | undefined;
 
   try {
-    // Sign with TACo (uses pre-computed userOp and discord context)
+    // Sign with TACo (uses pre-computed userOp and pre-built signing context)
+    const signingContext = buildSigningContext(prepared.discordContext);
     const tacoStartTime = Date.now();
-    await signUserOpWithTaco(
+    const result = await signUserOpWithTaco(
       prepared.userOp,
       signingCoordinatorProvider,
-      prepared.discordContext,
+      signingContext,
       REQUEST_TIMEOUT_SECONDS,
     );
     tacoSigningTimeMs = Date.now() - tacoStartTime;
+    timing = result.timing;
 
     const endTime = Date.now();
     return {
@@ -845,6 +882,7 @@ async function executeSigningRequestInner(
       duration: endTime - startTime,
       success: true,
       tacoSigningTimeMs,
+      timing,
     };
   } catch (error) {
     const endTime = Date.now();
@@ -857,6 +895,7 @@ async function executeSigningRequestInner(
       success: false,
       error: `[taco-signing] ${errorMessage}`,
       tacoSigningTimeMs,
+      timing,
     };
   }
 }
@@ -901,6 +940,18 @@ function calculateStats(values: number[]): Stats {
 
 function sleep(ms: number): Promise<void> {
   return new Promise((resolve) => setTimeout(resolve, ms));
+}
+
+async function cooldownTimer(seconds: number, label: string): Promise<void> {
+  for (let remaining = seconds; remaining > 0; remaining--) {
+    const mins = Math.floor(remaining / 60);
+    const secs = remaining % 60;
+    const time =
+      mins > 0 ? `${mins}m ${String(secs).padStart(2, "0")}s` : `${secs}s`;
+    process.stdout.write(`\r[stress-test] ${label} ${time}  `);
+    await sleep(1000);
+  }
+  process.stdout.write(`\r[stress-test] ${label} done${" ".repeat(20)}\n`);
 }
 
 interface SteadyModeOptions {
@@ -981,13 +1032,15 @@ async function runSteadyMode(
 
     // Progress update
     const totalDesc = totalRequests ? `/${totalRequests}` : "";
+    const t = result.timing;
+    const timingStr = t
+      ? ` | rpc:${t.fetchParticipantsMs + t.fetchThresholdMs}ms req:${t.makeSigningRequestsMs}ms porter:${t.porterRoundTripMs}ms dec:${t.decryptAndAggregateMs}ms`
+      : "";
     console.log(
       `[${elapsed.toFixed(0).padStart(3, "0")}s] Completed ${completedCount}${totalDesc} | ` +
         `in-flight: ${inFlight} | ` +
         `${result.success ? "ok" : "FAIL"} ${result.duration}ms` +
-        (result.tacoSigningTimeMs
-          ? ` | taco: ${result.tacoSigningTimeMs}ms`
-          : "") +
+        timingStr +
         (consecutiveFailures > 0
           ? ` | consec-fail: ${consecutiveFailures}`
           : ""),
@@ -1114,18 +1167,34 @@ async function runBurstMode(
     const successCount = results.filter((r) => r.success).length;
     const avgDuration =
       results.reduce((a, r) => a + r.duration, 0) / results.length;
-    const tacoResults = results.filter((r) => r.tacoSigningTimeMs);
-    const avgTaco =
-      tacoResults.length > 0
-        ? tacoResults.reduce((a, r) => a + (r.tacoSigningTimeMs || 0), 0) /
-          tacoResults.length
-        : 0;
+    const timedResults = results.filter((r) => r.timing);
+    const avgTiming =
+      timedResults.length > 0
+        ? {
+            rpc:
+              timedResults.reduce(
+                (a, r) =>
+                  a +
+                  (r.timing!.fetchParticipantsMs + r.timing!.fetchThresholdMs),
+                0,
+              ) / timedResults.length,
+            porter:
+              timedResults.reduce(
+                (a, r) => a + r.timing!.porterRoundTripMs,
+                0,
+              ) / timedResults.length,
+          }
+        : null;
+    const timingStr = avgTiming
+      ? ` | rpc:${(avgTiming.rpc / 1000).toFixed(2)}s porter:${(avgTiming.porter / 1000).toFixed(2)}s`
+      : "";
 
     console.log(
       `[${elapsed.toFixed(0).padStart(3, "0")}s] Batch ${batch + 1}/${totalBatches} | ` +
         `${results.length}/${totalRequests} requests | ` +
         `${successCount} ok, ${results.length - successCount} fail | ` +
-        `avg: ${(avgDuration / 1000).toFixed(2)}s | taco: ${(avgTaco / 1000).toFixed(2)}s`,
+        `avg: ${(avgDuration / 1000).toFixed(2)}s` +
+        timingStr,
     );
   }
 
@@ -1271,6 +1340,28 @@ function printResults(
     console.log();
     console.log("TACO SIGNING TIME");
     console.log(formatStats(tacoStats));
+  }
+
+  // Timing breakdown from signUserOp internals
+  const timedResults = results.filter((r) => r.timing);
+  if (timedResults.length > 0) {
+    const rpcTimes = timedResults.map(
+      (r) => r.timing!.fetchParticipantsMs + r.timing!.fetchThresholdMs,
+    );
+    const reqTimes = timedResults.map((r) => r.timing!.makeSigningRequestsMs);
+    const porterTimes = timedResults.map((r) => r.timing!.porterRoundTripMs);
+    const decTimes = timedResults.map((r) => r.timing!.decryptAndAggregateMs);
+
+    console.log();
+    console.log("TIMING BREAKDOWN (signUserOp internals)");
+    console.log("  RPC (participants + threshold):");
+    console.log(formatStats(calculateStats(rpcTimes)));
+    console.log("  Build signing requests (local crypto):");
+    console.log(formatStats(calculateStats(reqTimes)));
+    console.log("  Porter round-trip (network to nodes):");
+    console.log(formatStats(calculateStats(porterTimes)));
+    console.log("  Decrypt + aggregate (local crypto):");
+    console.log(formatStats(calculateStats(decTimes)));
   }
 
   if (errorsWithCounts.length > 0) {
@@ -1671,8 +1762,8 @@ function generateHtmlReport(data: TestData): string {
       <thead>
         <tr>
           <th>Metric</th>
-          <th>Success</th>
-          <th>Failure</th>
+          <th>Success TACo Time</th>
+          <th>Failure Latency</th>
         </tr>
       </thead>
       <tbody>
@@ -1682,24 +1773,24 @@ function generateHtmlReport(data: TestData): string {
           <td>${steadyResults[0].requests.failed}</td>
         </tr>
         <tr>
-          <td>Latency p50</td>
-          <td>${steadyResults[0].successLatency ? formatDuration(steadyResults[0].successLatency.p50) : "N/A"}</td>
+          <td>min</td>
+          <td>${steadyResults[0].successTacoSigningTime ? formatDuration(steadyResults[0].successTacoSigningTime.min) : "N/A"}</td>
+          <td>${steadyResults[0].failureLatency ? formatDuration(steadyResults[0].failureLatency.min) : "N/A"}</td>
+        </tr>
+        <tr>
+          <td>p50</td>
+          <td>${steadyResults[0].successTacoSigningTime ? formatDuration(steadyResults[0].successTacoSigningTime.p50) : "N/A"}</td>
           <td>${steadyResults[0].failureLatency ? formatDuration(steadyResults[0].failureLatency.p50) : "N/A"}</td>
         </tr>
         <tr>
-          <td>Latency p95</td>
-          <td>${steadyResults[0].successLatency ? formatDuration(steadyResults[0].successLatency.p95) : "N/A"}</td>
+          <td>p95</td>
+          <td>${steadyResults[0].successTacoSigningTime ? formatDuration(steadyResults[0].successTacoSigningTime.p95) : "N/A"}</td>
           <td>${steadyResults[0].failureLatency ? formatDuration(steadyResults[0].failureLatency.p95) : "N/A"}</td>
         </tr>
         <tr>
-          <td>TACo Time p50</td>
-          <td>${steadyResults[0].successTacoSigningTime ? formatDuration(steadyResults[0].successTacoSigningTime.p50) : "N/A"}</td>
-          <td>${steadyResults[0].failureTacoSigningTime ? formatDuration(steadyResults[0].failureTacoSigningTime.p50) : "N/A"}</td>
-        </tr>
-        <tr>
-          <td>TACo Time p95</td>
-          <td>${steadyResults[0].successTacoSigningTime ? formatDuration(steadyResults[0].successTacoSigningTime.p95) : "N/A"}</td>
-          <td>${steadyResults[0].failureTacoSigningTime ? formatDuration(steadyResults[0].failureTacoSigningTime.p95) : "N/A"}</td>
+          <td>p99</td>
+          <td>${steadyResults[0].successTacoSigningTime ? formatDuration(steadyResults[0].successTacoSigningTime.p99) : "N/A"}</td>
+          <td>${steadyResults[0].failureLatency ? formatDuration(steadyResults[0].failureLatency.p99) : "N/A"}</td>
         </tr>
       </tbody>
     </table>
@@ -1725,13 +1816,21 @@ function generateHtmlReport(data: TestData): string {
     <table>
       <thead>
         <tr>
-          <th>Rate</th>
-          <th>Total</th>
-          <th>Success %</th>
-          <th>Success Latency p50</th>
-          <th>Failure Latency p50</th>
-          <th>TACo Success p50</th>
-          <th>TACo Failure p50</th>
+          <th rowspan="2">Rate</th>
+          <th rowspan="2">Total</th>
+          <th rowspan="2">Success %</th>
+          <th colspan="4" style="text-align: center; border-bottom: 1px solid var(--border);">Success TACo Time</th>
+          <th colspan="4" style="text-align: center; border-bottom: 1px solid var(--border);">Failure Latency</th>
+        </tr>
+        <tr>
+          <th>min</th>
+          <th>p50</th>
+          <th>p95</th>
+          <th>p99</th>
+          <th>min</th>
+          <th>p50</th>
+          <th>p95</th>
+          <th>p99</th>
         </tr>
       </thead>
       <tbody>
@@ -1745,10 +1844,14 @@ function generateHtmlReport(data: TestData): string {
             <td>${r.targetRate}/min</td>
             <td>${r.requests.total}</td>
             <td>${successPct}%</td>
-            <td>${r.successLatency ? formatDuration(r.successLatency.p50) : "N/A"}</td>
-            <td>${r.failureLatency ? formatDuration(r.failureLatency.p50) : "N/A"}</td>
+            <td>${r.successTacoSigningTime ? formatDuration(r.successTacoSigningTime.min) : "N/A"}</td>
             <td>${r.successTacoSigningTime ? formatDuration(r.successTacoSigningTime.p50) : "N/A"}</td>
-            <td>${r.failureTacoSigningTime ? formatDuration(r.failureTacoSigningTime.p50) : "N/A"}</td>
+            <td>${r.successTacoSigningTime ? formatDuration(r.successTacoSigningTime.p95) : "N/A"}</td>
+            <td>${r.successTacoSigningTime ? formatDuration(r.successTacoSigningTime.p99) : "N/A"}</td>
+            <td>${r.failureLatency ? formatDuration(r.failureLatency.min) : "N/A"}</td>
+            <td>${r.failureLatency ? formatDuration(r.failureLatency.p50) : "N/A"}</td>
+            <td>${r.failureLatency ? formatDuration(r.failureLatency.p95) : "N/A"}</td>
+            <td>${r.failureLatency ? formatDuration(r.failureLatency.p99) : "N/A"}</td>
           </tr>`;
           })
           .join("")}
@@ -1780,14 +1883,22 @@ function generateHtmlReport(data: TestData): string {
     <table>
       <thead>
         <tr>
-          <th>Burst Size</th>
-          <th>Total</th>
-          <th>Batches</th>
-          <th>Success %</th>
-          <th>Success Latency p50</th>
-          <th>Failure Latency p50</th>
-          <th>TACo Success p50</th>
-          <th>TACo Failure p50</th>
+          <th rowspan="2">Burst Size</th>
+          <th rowspan="2">Total</th>
+          <th rowspan="2">Batches</th>
+          <th rowspan="2">Success %</th>
+          <th colspan="4" style="text-align: center; border-bottom: 1px solid var(--border);">Success TACo Time</th>
+          <th colspan="4" style="text-align: center; border-bottom: 1px solid var(--border);">Failure Latency</th>
+        </tr>
+        <tr>
+          <th>min</th>
+          <th>p50</th>
+          <th>p95</th>
+          <th>p99</th>
+          <th>min</th>
+          <th>p50</th>
+          <th>p95</th>
+          <th>p99</th>
         </tr>
       </thead>
       <tbody>
@@ -1803,10 +1914,14 @@ function generateHtmlReport(data: TestData): string {
             <td>${r.requests.total}</td>
             <td>${batches}</td>
             <td>${successPct}%</td>
-            <td>${r.successLatency ? formatDuration(r.successLatency.p50) : "N/A"}</td>
-            <td>${r.failureLatency ? formatDuration(r.failureLatency.p50) : "N/A"}</td>
+            <td>${r.successTacoSigningTime ? formatDuration(r.successTacoSigningTime.min) : "N/A"}</td>
             <td>${r.successTacoSigningTime ? formatDuration(r.successTacoSigningTime.p50) : "N/A"}</td>
-            <td>${r.failureTacoSigningTime ? formatDuration(r.failureTacoSigningTime.p50) : "N/A"}</td>
+            <td>${r.successTacoSigningTime ? formatDuration(r.successTacoSigningTime.p95) : "N/A"}</td>
+            <td>${r.successTacoSigningTime ? formatDuration(r.successTacoSigningTime.p99) : "N/A"}</td>
+            <td>${r.failureLatency ? formatDuration(r.failureLatency.min) : "N/A"}</td>
+            <td>${r.failureLatency ? formatDuration(r.failureLatency.p50) : "N/A"}</td>
+            <td>${r.failureLatency ? formatDuration(r.failureLatency.p95) : "N/A"}</td>
+            <td>${r.failureLatency ? formatDuration(r.failureLatency.p99) : "N/A"}</td>
           </tr>`;
           })
           .join("")}
@@ -2031,8 +2146,10 @@ ${perTestSections}
         successPct: (r.requests.success / r.requests.total) * 100,
         tacoP50: r.tacoSigningTime?.p50 || 0,
         tacoP95: r.tacoSigningTime?.p95 || 0,
+        successMin: r.successTacoSigningTime?.min || null,
         successP50: r.successTacoSigningTime?.p50 || null,
         successP95: r.successTacoSigningTime?.p95 || null,
+        failureMin: r.failureLatency?.min || null,
         failureP50: r.failureLatency?.p50 || null,
         failureP95: r.failureLatency?.p95 || null,
       })),
@@ -2047,8 +2164,10 @@ ${perTestSections}
         successPct: (r.requests.success / r.requests.total) * 100,
         tacoP50: r.tacoSigningTime?.p50 || 0,
         tacoP95: r.tacoSigningTime?.p95 || 0,
+        successMin: r.successTacoSigningTime?.min || null,
         successP50: r.successTacoSigningTime?.p50 || null,
         successP95: r.successTacoSigningTime?.p95 || null,
+        failureMin: r.failureLatency?.min || null,
         failureP50: r.failureLatency?.p50 || null,
         failureP95: r.failureLatency?.p95 || null,
       })),
@@ -2079,8 +2198,9 @@ ${perTestSections}
           labels: {
             color: '#ffffff',
             padding: 15,
-            usePointStyle: true,
-            pointStyle: 'circle',
+            usePointStyle: false,
+            boxWidth: 30,
+            boxHeight: 2,
             font: { size: 11 },
           },
         },
@@ -2311,6 +2431,22 @@ ${perTestSections}
           labels: steadyData.map(d => d.rate + '/min'),
           datasets: [
             {
+              label: 'Success TACo min',
+              data: steadyData.map(d => d.successMin ? d.successMin / 1000 : null),
+              borderColor: '#96FF5E',
+              backgroundColor: 'rgba(150, 255, 94, 0.1)',
+              borderWidth: 1,
+              borderDash: [2, 2],
+              fill: false,
+              tension: 0.2,
+              pointRadius: 3,
+              pointHoverRadius: 5,
+              pointBackgroundColor: '#96FF5E',
+              pointBorderColor: '#000000',
+              pointBorderWidth: 1,
+              spanGaps: true,
+            },
+            {
               label: 'Success TACo p50',
               data: steadyData.map(d => d.successP50 ? d.successP50 / 1000 : null),
               borderColor: '#96FF5E',
@@ -2337,6 +2473,22 @@ ${perTestSections}
               pointRadius: 4,
               pointHoverRadius: 6,
               pointBackgroundColor: '#96FF5E',
+              pointBorderColor: '#000000',
+              pointBorderWidth: 1,
+              spanGaps: true,
+            },
+            {
+              label: 'Failure Latency min',
+              data: steadyData.map(d => d.failureMin ? d.failureMin / 1000 : null),
+              borderColor: '#ef5350',
+              backgroundColor: 'rgba(239, 83, 80, 0.1)',
+              borderWidth: 1,
+              borderDash: [2, 2],
+              fill: false,
+              tension: 0.2,
+              pointRadius: 3,
+              pointHoverRadius: 5,
+              pointBackgroundColor: '#ef5350',
               pointBorderColor: '#000000',
               pointBorderWidth: 1,
               spanGaps: true,
@@ -2472,6 +2624,22 @@ ${perTestSections}
           labels: burstData.map(d => d.size + ' concurrent'),
           datasets: [
             {
+              label: 'Success TACo min',
+              data: burstData.map(d => d.successMin ? d.successMin / 1000 : null),
+              borderColor: '#96FF5E',
+              backgroundColor: 'rgba(150, 255, 94, 0.1)',
+              borderWidth: 1,
+              borderDash: [2, 2],
+              fill: false,
+              tension: 0.2,
+              pointRadius: 3,
+              pointHoverRadius: 5,
+              pointBackgroundColor: '#96FF5E',
+              pointBorderColor: '#000000',
+              pointBorderWidth: 1,
+              spanGaps: true,
+            },
+            {
               label: 'Success TACo p50',
               data: burstData.map(d => d.successP50 ? d.successP50 / 1000 : null),
               borderColor: '#96FF5E',
@@ -2498,6 +2666,22 @@ ${perTestSections}
               pointRadius: 4,
               pointHoverRadius: 6,
               pointBackgroundColor: '#96FF5E',
+              pointBorderColor: '#000000',
+              pointBorderWidth: 1,
+              spanGaps: true,
+            },
+            {
+              label: 'Failure Latency min',
+              data: burstData.map(d => d.failureMin ? d.failureMin / 1000 : null),
+              borderColor: '#ef5350',
+              backgroundColor: 'rgba(239, 83, 80, 0.1)',
+              borderWidth: 1,
+              borderDash: [2, 2],
+              fill: false,
+              tension: 0.2,
+              pointRadius: 3,
+              pointHoverRadius: 5,
+              pointBackgroundColor: '#ef5350',
               pointBorderColor: '#000000',
               pointBorderWidth: 1,
               spanGaps: true,
@@ -2749,18 +2933,12 @@ Examples:
       );
 
       if (testRate !== rates[rates.length - 1]) {
-        console.log(
-          `\n[stress-test] Cooling down ${cooldown}s before next rate...\n`,
-        );
-        await sleep(cooldown * 1000);
+        await cooldownTimer(cooldown, "Cooling down before next rate...");
       }
     }
 
     // Cooldown between steady and burst sections
-    console.log(
-      `\n[stress-test] Cooling down ${cooldown}s before burst tests...\n`,
-    );
-    await sleep(cooldown * 1000);
+    await cooldownTimer(cooldown, "Cooling down before burst tests...");
 
     // Then run all burst tests
     console.log("\n\n" + "=".repeat(60));
@@ -2779,10 +2957,7 @@ Examples:
       burstResults.push(printResults(results, "burst", burstSize));
 
       if (burstSize !== burstSizes[burstSizes.length - 1]) {
-        console.log(
-          `\n[stress-test] Cooling down ${cooldown}s before next burst size...\n`,
-        );
-        await sleep(cooldown * 1000);
+        await cooldownTimer(cooldown, "Cooling down before next burst size...");
       }
     }
 
