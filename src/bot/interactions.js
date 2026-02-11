@@ -290,8 +290,8 @@ function createServer() {
       if (tokenOpt) tokenType = String(tokenOpt);
 
       if (sendCmd) {
-        // send command: address option is a raw ETH address
-        const addressOpt = options.find((o) => o?.name === "address")?.value;
+        // send command: receiver option is a raw ETH address
+        const addressOpt = options.find((o) => o?.name === "receiver")?.value;
         if (addressOpt) recipientAddress = String(addressOpt);
       } else {
         // execute command: receiver option is a Discord user ID

@@ -68,7 +68,7 @@ const commands = [
         type: ApplicationCommandOptionType.Subcommand,
         options: [
           {
-            name: "address",
+            name: "receiver",
             description: "Ethereum address to receive the transfer (0x...)",
             type: ApplicationCommandOptionType.String,
             required: true,
