@@ -151,249 +151,96 @@
         ]
       },
       {
-        "conditionType": "compound",
-        "operator": "or",
-        "operands": [
+        "conditionType": "sequential",
+        "conditionVariables": [
           {
-            "conditionType": "sequential",
-            "conditionVariables": [
-              {
-                "varName": "amountUSDC",
-                "condition": {
-                  "conditionType": "json",
-                  "data": ":discordPayload",
-                  "query": "$.data.options[0].options[?(@.name == \"amount\")].value",
-                  "returnValueTest": {
-                    "comparator": ">=",
-                    "value": 0.25,
-                    "operations": [
-                      {
-                        "operation": "float"
-                      }
-                    ]
-                  }
-                },
+            "varName": "amountUSDC",
+            "condition": {
+              "conditionType": "json",
+              "data": ":discordPayload",
+              "query": "$.data.options[0].options[?(@.name == \"amount\")].value",
+              "returnValueTest": {
+                "comparator": ">=",
+                "value": 0.25,
                 "operations": [
                   {
-                    "operation": "toTokenBaseUnits",
-                    "value": 6
+                    "operation": "float"
                   }
                 ]
-              },
+              }
+            },
+            "operations": [
               {
-                "varName": "recipientSalt",
-                "condition": {
-                  "conditionType": "json",
-                  "data": ":discordPayload",
-                  "query": "$.data.options[0].options[?(@.name == \"receiver\")].value",
-                  "returnValueTest": {
-                    "comparator": ">",
-                    "value": 0
-                  }
-                },
-                "operations": [
-                  {
-                    "operation": "str"
-                  },
-                  {
-                    "operation": "+=",
-                    "value": "|Discord|Collab.Land"
-                  },
-                  {
-                    "operation": "keccak"
-                  }
-                ]
-              },
-              {
-                "varName": "recipientAA",
-                "condition": {
-                  "chain": 8453,
-                  "method": "computeAddress",
-                  "parameters": [
-                    "0x365a7db7cf8b7bc3eb36e43cf0c38ca8f1caab2c4afbe4f8f1e4fc5af110e0b4",
-                    ":recipientSalt"
-                  ],
-                  "contractAddress": "0x69Aa2f9fe1572F1B640E1bbc512f5c3a734fc77c",
-                  "functionAbi": {
-                    "name": "computeAddress",
-                    "type": "function",
-                    "inputs": [
-                      {
-                        "name": "_bytecodeHash",
-                        "type": "bytes32",
-                        "internalType": "bytes32"
-                      },
-                      {
-                        "name": "_salt",
-                        "type": "bytes32",
-                        "internalType": "bytes32"
-                      }
-                    ],
-                    "outputs": [
-                      {
-                        "name": "",
-                        "type": "address",
-                        "internalType": "address"
-                      }
-                    ],
-                    "stateMutability": "view"
-                  },
-                  "returnValueTest": {
-                    "comparator": "!=",
-                    "value": "0x0000000000000000000000000000000000000000"
-                  },
-                  "conditionType": "contract"
-                }
-              },
-              {
-                "varName": "validateCalldata",
-                "condition": {
-                  "signingObjectContextVar": ":signingConditionObject",
-                  "attributeName": "call_data",
-                  "conditionType": "signing-abi-attribute",
-                  "abiValidation": {
-                    "allowedAbiCalls": {
-                      "execute((address,uint256,bytes))": [
-                        {
-                          "parameterIndex": 0,
-                          "indexWithinTuple": 0,
-                          "returnValueTest": {
-                            "comparator": "==",
-                            "value": "0x833589fCD6eDb6E08f4c7C32D4f71b54bdA02913"
-                          }
-                        },
-                        {
-                          "parameterIndex": 0,
-                          "indexWithinTuple": 1,
-                          "returnValueTest": {
-                            "comparator": "==",
-                            "value": 0
-                          }
-                        },
-                        {
-                          "parameterIndex": 0,
-                          "indexWithinTuple": 2,
-                          "nestedAbiValidation": {
-                            "allowedAbiCalls": {
-                              "transfer(address,uint256)": [
-                                {
-                                  "parameterIndex": 0,
-                                  "returnValueTest": {
-                                    "comparator": "==",
-                                    "value": ":recipientAA"
-                                  }
-                                },
-                                {
-                                  "parameterIndex": 1,
-                                  "returnValueTest": {
-                                    "comparator": "==",
-                                    "value": ":amountUSDC"
-                                  }
-                                }
-                              ]
-                            }
-                          }
-                        }
-                      ]
-                    }
-                  }
-                }
+                "operation": "toTokenBaseUnits",
+                "value": 6
               }
             ]
           },
           {
-            "conditionType": "sequential",
-            "conditionVariables": [
-              {
-                "varName": "amountUSDCSend",
-                "condition": {
-                  "conditionType": "json",
-                  "data": ":discordPayload",
-                  "query": "$.data.options[0].options[?(@.name == \"amount\")].value",
-                  "returnValueTest": {
-                    "comparator": ">=",
-                    "value": 0.25,
-                    "operations": [
-                      {
-                        "operation": "float"
+            "varName": "recipientDirect",
+            "condition": {
+              "conditionType": "json",
+              "data": ":discordPayload",
+              "query": "$.data.options[0].options[?(@.name == \"address\")].value",
+              "returnValueTest": {
+                "comparator": ">",
+                "value": 0
+              }
+            }
+          },
+          {
+            "varName": "validateCalldata",
+            "condition": {
+              "signingObjectContextVar": ":signingConditionObject",
+              "attributeName": "call_data",
+              "conditionType": "signing-abi-attribute",
+              "abiValidation": {
+                "allowedAbiCalls": {
+                  "execute((address,uint256,bytes))": [
+                    {
+                      "parameterIndex": 0,
+                      "indexWithinTuple": 0,
+                      "returnValueTest": {
+                        "comparator": "==",
+                        "value": "0x833589fCD6eDb6E08f4c7C32D4f71b54bdA02913"
                       }
-                    ]
-                  }
-                },
-                "operations": [
-                  {
-                    "operation": "toTokenBaseUnits",
-                    "value": 6
-                  }
-                ]
-              },
-              {
-                "varName": "recipientDirect",
-                "condition": {
-                  "conditionType": "json",
-                  "data": ":discordPayload",
-                  "query": "$.data.options[0].options[?(@.name == \"receiver\")].value",
-                  "returnValueTest": {
-                    "comparator": ">",
-                    "value": 0
-                  }
-                }
-              },
-              {
-                "varName": "validateCalldataSend",
-                "condition": {
-                  "signingObjectContextVar": ":signingConditionObject",
-                  "attributeName": "call_data",
-                  "conditionType": "signing-abi-attribute",
-                  "abiValidation": {
-                    "allowedAbiCalls": {
-                      "execute((address,uint256,bytes))": [
-                        {
-                          "parameterIndex": 0,
-                          "indexWithinTuple": 0,
-                          "returnValueTest": {
-                            "comparator": "==",
-                            "value": "0x833589fCD6eDb6E08f4c7C32D4f71b54bdA02913"
-                          }
-                        },
-                        {
-                          "parameterIndex": 0,
-                          "indexWithinTuple": 1,
-                          "returnValueTest": {
-                            "comparator": "==",
-                            "value": 0
-                          }
-                        },
-                        {
-                          "parameterIndex": 0,
-                          "indexWithinTuple": 2,
-                          "nestedAbiValidation": {
-                            "allowedAbiCalls": {
-                              "transfer(address,uint256)": [
-                                {
-                                  "parameterIndex": 0,
-                                  "returnValueTest": {
-                                    "comparator": "==",
-                                    "value": ":recipientDirect"
-                                  }
-                                },
-                                {
-                                  "parameterIndex": 1,
-                                  "returnValueTest": {
-                                    "comparator": "==",
-                                    "value": ":amountUSDCSend"
-                                  }
-                                }
-                              ]
+                    },
+                    {
+                      "parameterIndex": 0,
+                      "indexWithinTuple": 1,
+                      "returnValueTest": {
+                        "comparator": "==",
+                        "value": 0
+                      }
+                    },
+                    {
+                      "parameterIndex": 0,
+                      "indexWithinTuple": 2,
+                      "nestedAbiValidation": {
+                        "allowedAbiCalls": {
+                          "transfer(address,uint256)": [
+                            {
+                              "parameterIndex": 0,
+                              "returnValueTest": {
+                                "comparator": "==",
+                                "value": ":recipientDirect"
+                              }
+                            },
+                            {
+                              "parameterIndex": 1,
+                              "returnValueTest": {
+                                "comparator": "==",
+                                "value": ":amountUSDC"
+                              }
                             }
-                          }
+                          ]
                         }
-                      ]
+                      }
                     }
-                  }
+                  ]
                 }
               }
-            ]
+            }
           }
         ]
       }
